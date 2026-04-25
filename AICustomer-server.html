@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI客服 — 超管端</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body, #root { height: 100%; }
+  body { font-family: 'Noto Sans SC', 'PingFang SC', system-ui, sans-serif; background: #eef2f7; color: #0f172a; }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState } = React;
+
+const T = {
+  sidebar: '#0c1427',
+  sidebarHover: '#162033',
+  sidebarActive: '#0d6e68',
+  accent: '#0d9488',
+  accentLight: '#f0fdfa',
+  accentText: '#0d6e68',
+  bg: '#eef2f7',
+  card: '#ffffff',
+  border: '#e2e8f0',
+  text: '#0f172a',
+  textMuted: '#64748b',
+  textLight: '#94a3b8',
+  green: '#16a34a', greenBg: '#f0fdf4',
+  red: '#dc2626', redBg: '#fef2f2',
+  yellow: '#d97706', yellowBg: '#fffbeb',
+  blue: '#2563eb', blueBg: '#eff6ff',
+  purple: '#7c3aed', purpleBg: '#f5f3ff',
+  orange: '#ea580c', orangeBg: '#fff7ed',
+};
+
+// ─── Shared primitives ──────────────────────────────────────────
+const Card = ({ children, style }) => (
+  <div style={{ background: T.card, borderRadius: 10, border: `1px solid ${T.border}`, padding: 22, ...style }}>{children}</div>
+);
+
+const Badge = ({ color = 'gray', children }) => {
+  const map = { green:{bg:T.greenBg,c:T.green}, red:{bg:T.redBg,c:T.red}, yellow:{bg:T.yellowBg,c:T.yellow}, blue:{bg:T.blueBg,c:T.blue}, purple:{bg:T.purpleBg,c:T.purple}, teal:{bg:T.accentLight,c:T.accentText}, orange:{bg:T.orangeBg,c:T.orange}, gray:{bg:'#f1f5f9',c:T.textMuted} };
+  const s = map[color]||map.gray;
+  return <span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'2px 10px',borderRadius:20,fontSize:12,fontWeight:500,background:s.bg,color:s.c}}>{children}</span>;
+};
+
+const SectionTitle = ({ children, action }) => (
+  <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16 }}>
+    <h3 style={{ fontSize:14,fontWeight:600,color:T.text }}>{children}</h3>
+    {action}
+  </div>
+);
+
+const Metric = ({ label, value, sub, color }) => (
+  <Card style={{ flex:1 }}>
+    <div style={{fontSize:12,color:T.textMuted,marginBottom:6}}>{label}</div>
+    <div style={{fontSize:26,fontWeight:700,color:color||T.accent,marginBottom:3}}>{value}</div>
+    <div style={{fontSize:12,color:T.textLight}}>{sub}</div>
+  </Card>
+);
+
+const Btn = ({ children, variant='primary', style, onClick, disabled }) => {
+  const v = { primary:{background:T.accent,color:'#fff',border:'none'}, secondary:{background:'#f1f5f9',color:T.text,border:`1px solid ${T.border}`}, ghost:{background:'transparent',color:T.accent,border:`1px solid ${T.accent}`}, danger:{background:T.red,color:'#fff',border:'none'} };
+  return <button disabled={disabled} onClick={onClick} style={{display:'inline-flex',alignItems:'center',gap:6,padding:'7px 15px',borderRadius:7,fontSize:13,fontWeight:500,cursor:disabled?'not-allowed':'pointer',opacity:disabled?.5:1,...v[variant],...style}}>{children}</button>;
+};
+
+const Table = ({ cols, rows }) => (
+  <div style={{overflowX:'auto'}}>
+    <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+      <thead>
+        <tr style={{background:'#f8fafc'}}>
+          {cols.map((c,i)=><th key={i} style={{padding:'10px 14px',textAlign:'left',fontWeight:500,color:T.textMuted,borderBottom:`1px solid ${T.border}`,whiteSpace:'nowrap'}}>{c}</th>)}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row,i)=>(
+          <tr key={i} style={{borderBottom:`1px solid #f1f5f9`}}>
+            {row.map((cell,j)=><td key={j} style={{padding:'11px 14px',color:T.text}}>{cell}</td>)}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
+
+const PlaceholderChart = ({ height=160, label }) => (
+  <div style={{height,background:'#f8fafc',border:`1px dashed ${T.border}`,borderRadius:8,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8}}>
+    <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+      <rect x="2" y="18" width="6" height="12" rx="2" fill="#cbd5e1"/>
+      <rect x="10" y="10" width="6" height="20" rx="2" fill="#94a3b8"/>
+      <rect x="18" y="14" width="6" height="16" rx="2" fill="#cbd5e1"/>
+      <rect x="26" y="6" width="6" height="24" rx="2" fill="#64748b"/>
+    </svg>
+    <span style={{fontSize:12,color:T.textLight}}>{label||'图表区域'}</span>
+  </div>
+);
+
+const Toggle = ({ on }) => (
+  <div style={{width:36,height:20,borderRadius:10,background:on?T.accent:'#cbd5e1',position:'relative',cursor:'pointer',flexShrink:0}}>
+    <div style={{position:'absolute',top:2,left:on?18:2,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .2s'}}/>
+  </div>
+);
+
+// ─── MODULE 1: 商户管理 ────────────────────────────────────────
+const MerchantMgmt = () => {
+  const [tab, setTab] = useState('全部');
+  const merchants = [
+    { name: '防辐射服装旗舰', industry:'防辐射服装', shops:3, stage:'live', contract:'已签', plan:'free', since:'2026-03' },
+    { name: '孕期健康专卖', industry:'防辐射服装', shops:1, stage:'coaching', contract:'已签', plan:'free', since:'2026-04' },
+    { name: '银纤维科技', industry:'防辐射服装', shops:2, stage:'sandboxed', contract:'待签', plan:'free', since:'2026-04' },
+    { name: '测试商户A', industry:'3C数码', shops:0, stage:'reviewing', contract:'审核中', plan:'—', since:'2026-04' },
+  ];
+  const stageMap = { live:{color:'green',label:'运行中'}, coaching:{color:'yellow',label:'陪跑中'}, sandboxed:{color:'blue',label:'沙盒阶段'}, reviewing:{color:'orange',label:'待审核'} };
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:20}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div><h2 style={{fontSize:18,fontWeight:600}}>商户管理</h2><p style={{fontSize:13,color:T.textMuted,marginTop:4}}>商户准入审核、档案管理与服务开关</p></div>
+        <Btn>+ 新增商户</Btn>
+      </div>
+      <div style={{display:'flex',gap:16}}>
+        <Metric label="全部商户" value="4" sub="3家运营中，1家待审" />
+        <Metric label="店铺总数" value="6" sub="天猫2 · 淘宝2 · 京东2" color={T.blue} />
+        <Metric label="待审核" value="1" sub="需人工审批" color={T.orange} />
+        <Metric label="本月新增" value="2" sub="较上月 +1" color={T.purple} />
+      </div>
+      <Card>
+        <div style={{display:'flex',gap:0,borderBottom:`1px solid ${T.border}`,marginBottom:18}}>
+          {['全部','运行中','陪跑中','待审核'].map(t=>(
+            <button key={t} onClick={()=>setTab(t)} style={{padding:'9px 18px',background:'none',border:'none',borderBottom:tab===t?`2px solid ${T.accent}`:'2px solid transparent',color:tab===t?T.accent:T.textMuted,fontWeight:tab===t?600:400,fontSize:13,cursor:'pointer',marginBottom:-1}}>{t}</button>
+          ))}
+        </div>
+        <Table
+          cols={['商户名称','行业','店铺数','阶段','合同','套餐','接入时间','操作']}
+          rows={merchants.map(m=>[
+            <span style={{fontWeight:500}}>{m.name}</span>,
+            m.industry,
+            m.shops,
+            <Badge color={stageMap[m.stage].color}>{stageMap[m.stage].label}</Badge>,
+            <Badge color={m.contract==='已签'?'green':m.contract==='待签'?'yellow':'orange'}>{m.contract}</Badge>,
+            <Badge color="gray">{m.plan}</Badge>,
+            m.since,
+            <div style={{display:'flex',gap:6}}>
+              <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>档案</Btn>
+              {m.stage==='reviewing'?<Btn variant="primary" style={{padding:'3px 10px',fontSize:11,background:T.green}}>审核</Btn>:<Btn variant="secondary" style={{padding:'3px 10px',fontSize:11,color:T.red}}>暂停</Btn>}
+            </div>
+          ])}
+        />
+      </Card>
+      <Card>
+        <SectionTitle>准入审核队列</SectionTitle>
+        <div style={{padding:'16px 20px',background:'#fff7ed',borderRadius:8,border:`1px solid #fed7aa`,display:'flex',gap:20,alignItems:'flex-start'}}>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:600,fontSize:14,marginBottom:6}}>银纤维科技 · 申请接入</div>
+            <div style={{display:'flex',gap:16,fontSize:13,color:T.textMuted}}>
+              <span>行业：防辐射服装</span><span>店铺数：2</span><span>提交：2026-04-24</span>
+            </div>
+            <div style={{marginTop:10,display:'flex',gap:8}}>
+              <Badge color="orange">营业执照：已上传</Badge>
+              <Badge color="orange">品牌授权：待补充</Badge>
+              <Badge color="green">联系电话：已验证</Badge>
+            </div>
+          </div>
+          <div style={{display:'flex',gap:8,flexShrink:0}}>
+            <Btn variant="secondary" style={{color:T.red}}>拒绝</Btn>
+            <Btn style={{background:T.green}}>通过审核</Btn>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+};
+
+// ─── MODULE 2: 模型管理 ────────────────────────────────────────
+const ModelMgmt = () => {
+  const [abTab, setAbTab] = useState('配置');
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:20}}>
+      <div><h2 style={{fontSize:18,fontWeight:600}}>模型管理</h2><p style={{fontSize:13,color:T.textMuted,marginTop:4}}>模型路由、灰度切换、A/B测试与熔断降级配置</p></div>
+      <div style={{display:'flex',gap:16}}>
+        <Metric label="接入模型" value="3" sub="豆包 · 通义 · DeepSeek" />
+        <Metric label="今日总调用" value="48.2k" sub="成功率 99.7%" color={T.green} />
+        <Metric label="平均响应延迟" value="1.2s" sub="P95: 2.8s" color={T.blue} />
+        <Metric label="熔断触发" value="0" sub="今日" color={T.textMuted} />
+      </div>
+      <Card>
+        <SectionTitle children="模型清单" action={<Btn variant="ghost" style={{fontSize:12,padding:'4px 10px'}}>+ 接入新模型</Btn>} />
+        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+          {[
+            {name:'豆包 Pro',provider:'字节跳动',role:'主力模型',usage:'60%',cost:'¥0.008/k token',latency:'1.1s',status:true,default:true},
+            {name:'通义千问 Plus',provider:'阿里云',role:'备用模型',usage:'30%',cost:'¥0.006/k token',latency:'1.4s',status:true,default:false},
+            {name:'DeepSeek V3',provider:'深度求索',role:'长上下文',usage:'10%',cost:'¥0.004/k token',latency:'1.8s',status:true,default:false},
+          ].map((m,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',gap:16,padding:'14px 18px',borderRadius:8,background:'#f8fafc',border:`1px solid ${T.border}`}}>
+              <div style={{width:36,height:36,borderRadius:8,background:T.accentLight,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:T.accent,flexShrink:0}}>{m.name[0]}</div>
+              <div style={{flex:1}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
+                  <span style={{fontWeight:600,fontSize:13}}>{m.name}</span>
+                  {m.default&&<Badge color="teal">默认</Badge>}
+                  <Badge color="gray">{m.role}</Badge>
+                </div>
+                <div style={{fontSize:12,color:T.textMuted}}>{m.provider} · {m.cost} · 延迟 {m.latency}</div>
+              </div>
+              <div style={{textAlign:'center'}}>
+                <div style={{fontSize:18,fontWeight:700,color:T.text}}>{m.usage}</div>
+                <div style={{fontSize:11,color:T.textMuted}}>流量占比</div>
+              </div>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <Toggle on={m.status}/>
+                <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>配置</Btn>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+      <div style={{display:'flex',gap:16}}>
+        <Card style={{flex:1}}>
+          <SectionTitle>路由策略</SectionTitle>
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            {[
+              {rule:'短消息 / 常见FAQ',model:'通义千问 Plus（低成本）',tag:'yellow'},
+              {rule:'长上下文 / 复杂咨询',model:'豆包 Pro（高质量）',tag:'teal'},
+              {rule:'沙盒测试环境',model:'DeepSeek V3（节约成本）',tag:'blue'},
+              {rule:'商户特殊配置覆盖',model:'按商户指定',tag:'purple'},
+            ].map((r,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:'#f8fafc',borderRadius:7,border:`1px solid ${T.border}`}}>
+                <Badge color={r.tag}>{r.rule}</Badge>
+                <span style={{fontSize:12,color:T.textMuted,flex:1}}>→ {r.model}</span>
+                <Btn variant="secondary" style={{padding:'2px 8px',fontSize:11}}>编辑</Btn>
+              </div>
+            ))}
+          </div>
+        </Card>
+        <Card style={{flex:1}}>
+          <SectionTitle>熔断降级配置</SectionTitle>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            {[
+              {label:'错误率阈值',value:'5%',hint:'超过则触发熔断'},
+              {label:'响应超时',value:'5000 ms',hint:'单次调用超时判断'},
+              {label:'熔断恢复时间',value:'30 s',hint:'熔断后尝试恢复'},
+            ].map((f,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:12}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12,color:T.textMuted}}>{f.label}</div>
+                  <div style={{fontSize:11,color:T.textLight}}>{f.hint}</div>
+                </div>
+                <input defaultValue={f.value} style={{width:110,padding:'6px 10px',borderRadius:6,border:`1px solid ${T.border}`,fontSize:13,textAlign:'right',outline:'none'}}/>
+              </div>
+            ))}
+            <div style={{marginTop:4,padding:'10px 14px',background:T.greenBg,borderRadius:7,fontSize:12,color:T.green}}>✓ 当前无熔断事件，主模型运行正常</div>
+          </div>
+        </Card>
+      </div>
+      <Card>
+        <div style={{display:'flex',alignItems:'center',gap:16,marginBottom:16}}>
+          <h3 style={{fontSize:14,fontWeight:600}}>A/B 测试</h3>
+          {['配置','结果对比'].map(t=><button key={t} onClick={()=>setAbTab(t)} style={{padding:'5px 14px',borderRadius:20,border:`1px solid ${abTab===t?T.accent:T.border}`,background:abTab===t?T.accentLight:'transparent',color:abTab===t?T.accent:T.textMuted,fontSize:12,cursor:'pointer'}}>{t}</button>)}
+        </div>
+        {abTab==='配置'?(
+          <div style={{display:'flex',gap:12}}>
+            {[{label:'A 组（对照）',model:'豆包 Pro',pct:'50%',color:T.blue},{label:'B 组（实验）',model:'通义千问 Plus',pct:'50%',color:T.accent}].map((g,i)=>(
+              <div key={i} style={{flex:1,padding:'16px',borderRadius:8,border:`2px solid ${g.color}20`,background:`${g.color}08`}}>
+                <div style={{fontWeight:600,fontSize:13,color:g.color,marginBottom:10}}>{g.label}</div>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:6}}>模型：{g.model}</div>
+                <div style={{fontSize:12,color:T.textMuted}}>流量分配：{g.pct}</div>
+              </div>
+            ))}
+          </div>
+        ):(
+          <Table cols={['指标','A 组（豆包）','B 组（通义）','差异']} rows={[
+            ['准确率','93.2%','91.8%',<Badge color="blue">A +1.4%</Badge>],
+            ['平均延迟','1.1s','1.4s',<Badge color="blue">A 更快</Badge>],
+            ['每会话成本','¥0.12','¥0.09',<Badge color="teal">B 更低</Badge>],
+            ['客户满意度','4.6/5','4.5/5',<Badge color="gray">持平</Badge>],
+          ]}/>
+        )}
+      </Card>
+    </div>
+  );
+};
+
+// ─── MODULE 3: 成本与用量 ─────────────────────────────────────
+const CostUsage = () => (
+  <div style={{display:'flex',flexDirection:'column',gap:20}}>
+    <div><h2 style={{fontSize:18,fontWeight:600}}>成本与用量</h2><p style={{fontSize:13,color:T.textMuted,marginTop:4}}>全平台 Token 消耗监控、商户摊销与配额管理</p></div>
+    <div style={{display:'flex',gap:16}}>
+      <Metric label="本月总 Token" value="12.4M" sub="较上月 +18%" />
+      <Metric label="本月总成本" value="¥ 1,240" sub="目标 ≤ ¥2,000" color={T.green} />
+      <Metric label="每会话成本" value="¥ 0.11" sub="每成单成本 ¥1.32" color={T.blue} />
+      <Metric label="异常用量告警" value="1" sub="防辐射旗舰店今日超标" color={T.orange} />
+    </div>
+    <div style={{display:'flex',gap:16}}>
+      <Card style={{flex:2}}>
+        <SectionTitle>Token 消耗趋势（近30天）</SectionTitle>
+        <PlaceholderChart height={180} label="折线图 · 按模型分色 · 豆包 / 通义 / DeepSeek"/>
+      </Card>
+      <Card style={{flex:1}}>
+        <SectionTitle>成本构成</SectionTitle>
+        <PlaceholderChart height={180} label="饼图 · 各模型成本占比"/>
+      </Card>
+    </div>
+    <Card>
+      <SectionTitle children="商户用量摊销" action={<Btn variant="secondary" style={{fontSize:12,padding:'4px 10px'}}>导出 CSV</Btn>}/>
+      <Table cols={['商户','本月 Token','等效成本','配额上限','用量%','状态','操作']} rows={[
+        ['防辐射服装旗舰','6.2M','¥ 620','10M','62%',<Badge color="green">正常</Badge>,<Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>详情</Btn>],
+        ['孕期健康专卖','3.8M','¥ 380','5M','76%',<Badge color="yellow">预警</Badge>,<Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>详情</Btn>],
+        ['银纤维科技','2.4M','¥ 240','5M','48%',<Badge color="green">正常</Badge>,<Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>详情</Btn>],
+      ]}/>
+    </Card>
+    <Card>
+      <SectionTitle>配额触发规则</SectionTitle>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12}}>
+        {[
+          {pct:'80%',action:'发送告警通知商户',color:T.yellow},
+          {pct:'100%',action:'自动切换至低成本模型',color:T.orange},
+          {pct:'150%',action:'暂停服务（或人工审批）',color:T.red},
+        ].map((r,i)=>(
+          <div key={i} style={{padding:'14px 16px',borderRadius:8,border:`1px solid ${r.color}30`,background:`${r.color}08`}}>
+            <div style={{fontSize:22,fontWeight:700,color:r.color,marginBottom:4}}>{r.pct}</div>
+            <div style={{fontSize:12,color:T.textMuted}}>{r.action}</div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  </div>
+);
+
+// ─── MODULE 4: AI身份/规则管理 ───────────────────────────────
+const AiRules = () => {
+  const [tab, setTab] = useState('全局Prompt');
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:20}}>
+      <div><h2 style={{fontSize:18,fontWeight:600}}>AI 身份 / 规则管理</h2><p style={{fontSize:13,color:T.textMuted,marginTop:4}}>全局 Prompt 编辑、行业模板、品牌口吻库管理</p></div>
+      <Card>
+        <div style={{display:'flex',gap:0,borderBottom:`1px solid ${T.border}`,marginBottom:18}}>
+          {['全局Prompt','行业模板','品牌口吻库','灰度发布'].map(t=>(
+            <button key={t} onClick={()=>setTab(t)} style={{padding:'9px 18px',background:'none',border:'none',borderBottom:tab===t?`2px solid ${T.accent}`:'2px solid transparent',color:tab===t?T.accent:T.textMuted,fontWeight:tab===t?600:400,fontSize:13,cursor:'pointer',marginBottom:-1}}>{t}</button>
+          ))}
+        </div>
+        {tab==='全局Prompt'&&(
+          <div style={{display:'flex',gap:16}}>
+            <div style={{flex:1}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                <span style={{fontSize:12,color:T.textMuted}}>当前版本：v1.4.2 · 2026-04-20 更新</span>
+                <div style={{display:'flex',gap:6}}><Btn variant="secondary" style={{fontSize:12,padding:'4px 10px'}}>查看历史</Btn><Btn style={{fontSize:12,padding:'4px 10px'}}>保存发布</Btn></div>
+              </div>
+              <textarea defaultValue={`你是一名专业的电商售前客服助手。你的职责是：\n1. 准确回答客户的商品咨询问题\n2. 根据知识库中的商品信息给出权威回答\n3. 遵守品牌口吻设置和禁忌词规则\n4. 在适当时机引导客户成单\n5. 遇到超出能力范围的问题时，礼貌地请求转接人工\n\n严格禁止：\n- 做出任何医学功效承诺\n- 透露内部定价策略\n- 承诺不确定的交货时间\n- 触发平台违规敏感词`} style={{width:'100%',height:200,padding:'12px',borderRadius:8,border:`1px solid ${T.border}`,fontSize:12,fontFamily:'monospace',resize:'vertical',outline:'none',lineHeight:1.7}}/>
+              <div style={{marginTop:8,padding:'8px 12px',background:T.yellowBg,borderRadius:6,fontSize:12,color:T.yellow}}>⚠ 修改全局 Prompt 将影响所有商户，建议先在沙盒验证再灰度发布</div>
+            </div>
+            <div style={{width:200,flexShrink:0}}>
+              <div style={{fontSize:12,color:T.textMuted,marginBottom:8}}>版本历史</div>
+              {['v1.4.2','v1.4.1','v1.4.0','v1.3.x'].map((v,i)=>(
+                <div key={v} style={{padding:'8px 10px',borderRadius:6,background:i===0?T.accentLight:'#f8fafc',border:`1px solid ${i===0?T.accent:T.border}`,marginBottom:6,fontSize:12}}>
+                  <div style={{fontWeight:i===0?600:400,color:i===0?T.accent:T.text}}>{v} {i===0&&'(当前)'}</div>
+                  <div style={{color:T.textLight,fontSize:11}}>2026-04-{20-i*3}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {tab==='行业模板'&&(
+          <Table cols={['模板名称','适用类目','商户引用数','最后更新','状态','操作']} rows={[
+            ['防辐射服装基础模板','防辐射/孕妇装',<Badge color="teal">3家</Badge>,'2026-04-18',<Badge color="green">已发布</Badge>,<div style={{display:'flex',gap:6}}><Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>编辑</Btn><Btn variant="ghost" style={{padding:'3px 10px',fontSize:11}}>推送更新</Btn></div>],
+            ['通用电商标准模板','全行业',<Badge color="teal">0家</Badge>,'2026-04-10',<Badge color="blue">草稿</Badge>,<div style={{display:'flex',gap:6}}><Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>编辑</Btn></div>],
+          ]}/>
+        )}
+        {tab==='品牌口吻库'&&(
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            {[
+              {name:'专业冷静',desc:'理性权威，适合B2B/高端客群',status:true},
+              {name:'亲切活泼',desc:'温暖口语化，适合孕母/女性客群',status:true},
+              {name:'高端简约',desc:'克制精准，适合轻奢/设计师品牌',status:true},
+              {name:'萌系软萌',desc:'可爱贴近，适合年轻/母婴客群',status:false},
+            ].map((t,i)=>(
+              <div key={i} style={{padding:'16px',borderRadius:8,border:`1px solid ${T.border}`,background:'#f8fafc',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                <div>
+                  <div style={{fontWeight:600,fontSize:13,marginBottom:4}}>{t.name}</div>
+                  <div style={{fontSize:12,color:T.textMuted}}>{t.desc}</div>
+                  <Badge color={t.status?'green':'gray'} >{t.status?'上架中':'已下架'}</Badge>
+                </div>
+                <div style={{display:'flex',gap:6}}>
+                  <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>编辑</Btn>
+                  <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11,color:t.status?T.red:T.green}}>{t.status?'下架':'上架'}</Btn>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {tab==='灰度发布'&&(
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <div style={{padding:'14px 16px',borderRadius:8,background:T.accentLight,border:`1px solid ${T.accent}30`,fontSize:13}}>
+              <div style={{fontWeight:600,color:T.accentText,marginBottom:4}}>当前灰度计划：Prompt v1.5.0-beta</div>
+              <div style={{color:T.textMuted}}>覆盖范围：10% 商户 · 进行中 · 开始时间：2026-04-25</div>
+            </div>
+            <div style={{display:'flex',gap:12}}>
+              <div style={{flex:1,padding:'14px',borderRadius:8,border:`1px solid ${T.border}`,background:'#f8fafc'}}>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:6}}>灰度商户（10%）</div>
+                <div style={{fontSize:22,fontWeight:700}}>1 家</div>
+                <div style={{fontSize:12,color:T.textLight,marginTop:2}}>防辐射服装旗舰</div>
+              </div>
+              <div style={{flex:1,padding:'14px',borderRadius:8,border:`1px solid ${T.border}`,background:'#f8fafc'}}>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:6}}>对照组（90%）</div>
+                <div style={{fontSize:22,fontWeight:700}}>3 家</div>
+                <div style={{fontSize:12,color:T.textLight,marginTop:2}}>使用 v1.4.2 稳定版</div>
+              </div>
+              <div style={{flex:1,padding:'14px',borderRadius:8,border:`1px solid ${T.border}`,background:'#f8fafc'}}>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:6}}>准确率对比</div>
+                <div style={{fontSize:22,fontWeight:700,color:T.green}}>+1.2%</div>
+                <div style={{fontSize:12,color:T.textLight,marginTop:2}}>灰度组 vs 对照组</div>
+              </div>
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <Btn>扩大至 50%</Btn>
+              <Btn variant="secondary">全量发布</Btn>
+              <Btn variant="secondary" style={{color:T.red}}>回滚</Btn>
+            </div>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+};
+
+// ─── MODULE 5: 质量与安全 ────────────────────────────────────
+const QualitySafety = () => (
+  <div style={{display:'flex',flexDirection:'column',gap:20}}>
+    <div><h2 style={{fontSize:18,fontWeight:600}}>质量与安全</h2><p style={{fontSize:13,color:T.textMuted,marginTop:4}}>审核队列、越权拦截规则、Prompt注入检测与评测集管理</p></div>
+    <div style={{display:'flex',gap:16}}>
+      <Metric label="待审核反馈" value="47" sub="较昨日 +12" color={T.orange} />
+      <Metric label="今日拦截次数" value="23" sub="越权输出全部拦截" color={T.green} />
+      <Metric label="评测集通过率" value="96.5%" sub="基线 ≥ 95% ✓" color={T.blue} />
+      <Metric label="Prompt 注入告警" value="3" sub="本周" color={T.red} />
+    </div>
+    <div style={{display:'flex',gap:16}}>
+      <Card style={{flex:1}}>
+        <SectionTitle children="差评/失败会话审核队列" action={<Badge color="orange">47 条待处理</Badge>}/>
+        {[
+          {type:'答错',merchant:'防辐射旗舰',q:'银纤维屏蔽率问题',source:'商户反馈',time:'1小时前'},
+          {type:'违反口吻',merchant:'孕期健康专卖',q:'联系方式泄露嫌疑',source:'自动检测',time:'2小时前'},
+          {type:'不确定度高',merchant:'防辐射旗舰',q:'团购价格计算',source:'模型标记',time:'3小时前'},
+          {type:'对抗性消息',merchant:'银纤维科技',q:'套取折扣话术',source:'自动检测',time:'5小时前'},
+        ].map((r,i)=>(
+          <div key={i} style={{display:'flex',gap:10,padding:'10px 0',borderBottom:i<3?`1px solid #f1f5f9`:'none',alignItems:'center'}}>
+            <Badge color={r.type==='答错'?'red':r.type==='违反口吻'?'orange':r.type==='不确定度高'?'yellow':'purple'}>{r.type}</Badge>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13}}>{r.q}</div>
+              <div style={{fontSize:11,color:T.textLight}}>{r.merchant} · {r.source} · {r.time}</div>
+            </div>
+            <Btn variant="secondary" style={{padding:'3px 8px',fontSize:11}}>审核</Btn>
+          </div>
+        ))}
+      </Card>
+      <Card style={{flex:1}}>
+        <SectionTitle>越权拦截规则</SectionTitle>
+        {[
+          {name:'打折承诺检测',desc:'识别"X折""立减X元"等价格承诺',on:true},
+          {name:'医学功效宣传',desc:'防辐射服装专用，识别功效过度声明',on:true},
+          {name:'内部信息泄露',desc:'供应商/成本/内部渠道等敏感词',on:true},
+          {name:'Prompt 注入检测',desc:'识别"忘记之前指令"等攻击模式',on:true},
+          {name:'对抗性消息识别',desc:'套折扣/套情报/骚扰行为检测',on:true},
+        ].map((r,i)=>(
+          <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderBottom:i<4?`1px solid #f1f5f9`:'none'}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:500}}>{r.name}</div>
+              <div style={{fontSize:11,color:T.textMuted}}>{r.desc}</div>
+            </div>
+            <Toggle on={r.on}/>
+          </div>
+        ))}
+      </Card>
+    </div>
+    <Card>
+      <SectionTitle children="评测集管理" action={<div style={{display:'flex',gap:8}}><Btn variant="secondary" style={{fontSize:12,padding:'4px 10px'}}>运行评测</Btn><Btn style={{fontSize:12,padding:'4px 10px'}}>+ 添加测试用例</Btn></div>}/>
+      <div style={{display:'flex',gap:16,marginBottom:16}}>
+        <div style={{padding:'12px 16px',background:T.greenBg,borderRadius:8,flex:1}}>
+          <div style={{fontSize:22,fontWeight:700,color:T.green}}>193 / 200</div>
+          <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>通过用例 · 通过率 96.5%</div>
+        </div>
+        <div style={{padding:'12px 16px',background:'#f8fafc',borderRadius:8,flex:1}}>
+          <div style={{fontSize:22,fontWeight:700}}>3 min 42 s</div>
+          <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>最近一次运行耗时 · &lt; 5min ✓</div>
+        </div>
+        <div style={{padding:'12px 16px',background:'#f8fafc',borderRadius:8,flex:1}}>
+          <div style={{fontSize:22,fontWeight:700,color:T.red}}>7 条</div>
+          <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>失败用例待修复</div>
+        </div>
+      </div>
+      <Table cols={['用例','类型','预期','实际结果','状态']} rows={[
+        ['问洗涤方式','FAQ命中','给出洗涤建议','正确回答，命中洗涤FAQ',<Badge color="green">通过</Badge>],
+        ['宣称100%防辐射','合规拦截','触发拦截重生成','成功拦截，改为合规措辞',<Badge color="green">通过</Badge>],
+        ['批量询价50件','转人工','触发数量阈值转人工','未触发，直接给出价格',<Badge color="red">失败</Badge>],
+      ]}/>
+    </Card>
+  </div>
+);
+
+// ─── MODULE 6: 知识库总控 ────────────────────────────────────
+const KbControl = () => (
+  <div style={{display:'flex',flexDirection:'column',gap:20}}>
+    <div><h2 style={{fontSize:18,fontWeight:600}}>知识库总控</h2><p style={{fontSize:13,color:T.textMuted,marginTop:4}}>全平台 KB 索引、公共 KB、行业模板与合规治理</p></div>
+    <div style={{display:'flex',gap:16}}>
+      <Metric label="全平台 KB 条目" value="2,847" sub="跨 4 家商户" />
+      <Metric label="公共 KB 条目" value="134" sub="七天无理由等通用条目" color={T.blue} />
+      <Metric label="待治理（违规/过期）" value="18" sub="需人工处理" color={T.orange} />
+      <Metric label="行业模板" value="1" sub="防辐射服装版本 v2.1" color={T.purple} />
+    </div>
+    <div style={{display:'flex',gap:16}}>
+      <Card style={{flex:2}}>
+        <SectionTitle children="商户 KB 索引" action={<input placeholder="搜索全平台KB..." style={{padding:'5px 12px',borderRadius:6,border:`1px solid ${T.border}`,fontSize:12,outline:'none',width:180}}/>}/>
+        <Table cols={['条目摘要','商户','类型','命中率','状态','操作']} rows={[
+          ['洗涤方式 - 30°C手洗','防辐射旗舰',<Badge color="blue">FAQ</Badge>,'342次',<Badge color="green">正常</Badge>,<Btn variant="secondary" style={{padding:'3px 8px',fontSize:11}}>查看</Btn>],
+          ['银纤维成分说明','防辐射旗舰',<Badge color="purple">商品参数</Badge>,'218次',<Badge color="green">正常</Badge>,<Btn variant="secondary" style={{padding:'3px 8px',fontSize:11}}>查看</Btn>],
+          ['双十一活动规则（过期）','孕期健康',<Badge color="yellow">促销</Badge>,'89次',<Badge color="red">已过期</Badge>,<Btn variant="secondary" style={{padding:'3px 8px',fontSize:11,color:T.red}}>下线</Btn>],
+          ['承诺100%防辐射（违规）','银纤维科技',<Badge color="red">话术</Badge>,'12次',<Badge color="red">违规</Badge>,<Btn variant="secondary" style={{padding:'3px 8px',fontSize:11,color:T.red}}>强制下线</Btn>],
+        ]}/>
+      </Card>
+      <Card style={{flex:1}}>
+        <SectionTitle>公共 KB 管理</SectionTitle>
+        {['七天无理由退换货','发票开具说明','物流时效说明','质保与售后政策','价保说明'].map((k,i)=>(
+          <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 0',borderBottom:i<4?`1px solid #f1f5f9`:'none'}}>
+            <span style={{flex:1,fontSize:13}}>{k}</span>
+            <Badge color="teal">公共</Badge>
+            <Btn variant="secondary" style={{padding:'2px 8px',fontSize:11}}>编辑</Btn>
+          </div>
+        ))}
+        <Btn variant="ghost" style={{marginTop:12,width:'100%',justifyContent:'center',fontSize:12}}>+ 新增公共条目</Btn>
+      </Card>
+    </div>
+    <Card>
+      <SectionTitle>KB 治理队列</SectionTitle>
+      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+        {[
+          {issue:'违规内容：含医学功效承诺',merchant:'银纤维科技',action:'强制下线',level:'red'},
+          {issue:'已过期：双十一活动促销规则',merchant:'孕期健康专卖',action:'建议下线',level:'yellow'},
+          {issue:'重复条目：洗涤说明与FAQ#012重叠',merchant:'防辐射旗舰',action:'建议合并',level:'blue'},
+        ].map((t,i)=>(
+          <div key={i} style={{display:'flex',gap:12,alignItems:'center',padding:'12px 16px',borderRadius:8,background:'#f8fafc',border:`1px solid ${T.border}`}}>
+            <Badge color={t.level}>{t.issue}</Badge>
+            <span style={{fontSize:12,color:T.textMuted,flex:1}}>{t.merchant}</span>
+            <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>{t.action}</Btn>
+          </div>
+        ))}
+      </div>
+    </Card>
+  </div>
+);
+
+// ─── MODULE 7: 平台适配 ───────────────────────────────────────
+const PlatformAdapt = () => (
+  <div style={{display:'flex',flexDirection:'column',gap:20}}>
+    <div><h2 style={{fontSize:18,fontWeight:600}}>平台适配</h2><p style={{fontSize:13,color:T.textMuted,marginTop:4}}>已接入平台健康度、API 版本管理与政策追踪</p></div>
+    <div style={{display:'flex',gap:16}}>
+      {[
+        {name:'天猫 / 淘宝',api:'Top API v2.4',rate:'99.8%',latency:'420ms',status:'green',sync:'5分钟前'},
+        {name:'京东',api:'JD-POP v1.9',rate:'98.1%',latency:'680ms',status:'yellow',sync:'8分钟前'},
+      ].map((p,i)=>(
+        <Card key={i} style={{flex:1}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
+            <div>
+              <div style={{fontWeight:600,fontSize:15}}>{p.name}</div>
+              <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>{p.api} · 同步：{p.sync}</div>
+            </div>
+            <Badge color={p.status}>{p.status==='green'?'健康':'注意'}</Badge>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <div style={{padding:'10px',background:'#f8fafc',borderRadius:6}}>
+              <div style={{fontSize:18,fontWeight:700,color:p.status==='green'?T.green:T.yellow}}>{p.rate}</div>
+              <div style={{fontSize:11,color:T.textMuted}}>API 可用率</div>
+            </div>
+            <div style={{padding:'10px',background:'#f8fafc',borderRadius:6}}>
+              <div style={{fontSize:18,fontWeight:700}}>{p.latency}</div>
+              <div style={{fontSize:11,color:T.textMuted}}>平均延迟</div>
+            </div>
+          </div>
+        </Card>
+      ))}
+    </div>
+    <Card>
+      <SectionTitle>平台政策追踪</SectionTitle>
+      <Table cols={['平台','政策事项','发现时间','生效日期','影响评估','状态']} rows={[
+        ['天猫','AI客服需标注"智能助手"身份（草案）','2026-04-20','TBD',<Badge color="red">高风险，待法务确认</Badge>,<Badge color="orange">跟踪中</Badge>],
+        ['淘宝','消息推送API每日限额调整至50万条','2026-03-15','2026-04-01',<Badge color="yellow">需优化队列策略</Badge>,<Badge color="green">已应对</Badge>],
+        ['京东','第三方客服接入需提交资质备案','2026-02-28','2026-05-01',<Badge color="orange">正在准备材料</Badge>,<Badge color="yellow">进行中</Badge>],
+      ]}/>
+    </Card>
+    <Card>
+      <SectionTitle>限流监控（今日）</SectionTitle>
+      <PlaceholderChart height={140} label="折线图 · 天猫/淘宝/京东 API调用量 vs 限额"/>
+    </Card>
+  </div>
+);
+
+// ─── MODULE 8: 运营基建 ───────────────────────────────────────
+const OpsInfra = () => (
+  <div style={{display:'flex',flexDirection:'column',gap:20}}>
+    <div><h2 style={{fontSize:18,fontWeight:600}}>运营基建</h2><p style={{fontSize:13,color:T.textMuted,marginTop:4}}>内部账号权限、审计日志与计费框架</p></div>
+    <div style={{display:'flex',gap:16}}>
+      <Card style={{flex:1}}>
+        <SectionTitle children="内部账号与角色" action={<Btn style={{fontSize:12,padding:'4px 10px'}}>+ 新增账号</Btn>}/>
+        <Table cols={['成员','角色','最后操作','状态']} rows={[
+          ['admin@aikefu.com',<Badge color="red">超管</Badge>,'刚刚',<Badge color="green">活跃</Badge>],
+          ['ops1@aikefu.com',<Badge color="purple">运营</Badge>,'30分钟前',<Badge color="green">活跃</Badge>],
+          ['tech1@aikefu.com',<Badge color="blue">技术</Badge>,'2小时前',<Badge color="green">活跃</Badge>],
+          ['cs1@aikefu.com',<Badge color="gray">客户成功</Badge>,'昨天',<Badge color="green">活跃</Badge>],
+        ]}/>
+      </Card>
+      <Card style={{flex:1}}>
+        <SectionTitle>计费框架（骨架）</SectionTitle>
+        <div style={{padding:'16px',background:'#f8fafc',borderRadius:8,border:`1px dashed ${T.border}`,marginBottom:12}}>
+          <div style={{fontSize:13,fontWeight:600,color:T.textMuted,marginBottom:8}}>一期：免费模式</div>
+          <div style={{fontSize:12,color:T.textLight,lineHeight:1.8}}>
+            · 当前计划：free<br/>
+            · Token 费用由平台承担<br/>
+            · 商户摊销仅供内部核算<br/>
+            · 二期切积分制时开启计费逻辑
+          </div>
+        </div>
+        <div style={{padding:'16px',background:T.accentLight,borderRadius:8,border:`1px solid ${T.accent}20`}}>
+          <div style={{fontSize:13,fontWeight:600,color:T.accentText,marginBottom:8}}>二期预留字段</div>
+          <div style={{fontSize:12,color:T.textMuted,lineHeight:1.8}}>
+            · plan_id（当前固定 free）<br/>
+            · credit_balance（积分余额）<br/>
+            · billing_cycle（计费周期）<br/>
+            · overage_policy（超额策略）
+          </div>
+        </div>
+      </Card>
+    </div>
+    <Card>
+      <SectionTitle children="审计日志" action={<div style={{display:'flex',gap:8}}><Btn variant="secondary" style={{fontSize:12,padding:'4px 10px'}}>筛选</Btn><Btn variant="secondary" style={{fontSize:12,padding:'4px 10px'}}>导出</Btn></div>}/>
+      <Table cols={['时间','操作人','操作类型','详情','影响对象']} rows={[
+        ['2026-04-25 15:42','ops1','Prompt发布','全局Prompt v1.4.2 → v1.5.0-beta（灰度10%）','全部商户'],
+        ['2026-04-25 14:30','admin','商户审核','通过防辐射服装旗舰店准入审核','防辐射旗舰'],
+        ['2026-04-25 11:20','tech1','模型配置','熔断阈值从5%调整为3%','全部商户'],
+        ['2026-04-24 16:45','ops1','KB强制下线','违规条目#204（医学功效承诺）强制下线','银纤维科技'],
+        ['2026-04-24 09:10','ops1','平台政策更新','天猫AI标识政策（草案）录入追踪','平台适配'],
+      ]}/>
+      <div style={{marginTop:10,fontSize:12,color:T.textLight,textAlign:'center'}}>审计日志保留 365 天 · 显示最近 50 条</div>
+    </Card>
+  </div>
+);
+
+// ─── MODULE 9: 数据回流闭环 ──────────────────────────────────
+const DataFeedback = () => (
+  <div style={{display:'flex',flexDirection:'column',gap:20}}>
+    <div><h2 style={{fontSize:18,fontWeight:600}}>数据回流闭环</h2><p style={{fontSize:13,color:T.textMuted,marginTop:4}}>好回答沉淀公共KB，差回答入训练池，跨商户聚合分析</p></div>
+    <div style={{display:'flex',gap:16}}>
+      <Metric label="训练样本池" value="1,284" sub="本周新增 89 条" />
+      <Metric label="待脱敏审核" value="23" sub="PII检测已通过" color={T.yellow} />
+      <Metric label="已入公共KB" value="134" sub="人工审核通过" color={T.green} />
+      <Metric label="跨商户高频问题" value="12" sub="待提炼为行业模板" color={T.purple} />
+    </div>
+    <div style={{display:'flex',gap:16}}>
+      <Card style={{flex:1}}>
+        <SectionTitle children="待入库 · 好回答" action={<Badge color="green">待审核 156 条</Badge>}/>
+        {[
+          {q:'银纤维含量多少？',a:'我们家面料银纤维含量约35%，屏蔽效率≥99.5%，通过国家纺织品检测',merchant:'防辐射旗舰',score:'4.8/5'},
+          {q:'孕几个月可以穿？',a:'孕期全程均可穿着，建议从孕3个月起使用，贴身穿着防护效果最佳',merchant:'孕期健康',score:'4.7/5'},
+          {q:'如何验证真假银纤维？',a:'可用万用表测量导电性，银纤维面料导电阻值通常≤10Ω/cm',merchant:'防辐射旗舰',score:'4.6/5'},
+        ].map((r,i)=>(
+          <div key={i} style={{padding:'12px 0',borderBottom:i<2?`1px solid #f1f5f9`:'none'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:5}}>
+              <span style={{fontSize:13,fontWeight:500}}>Q: {r.q}</span>
+              <Badge color="green">⭐ {r.score}</Badge>
+            </div>
+            <div style={{fontSize:12,color:T.textMuted,marginBottom:8,lineHeight:1.6}}>{r.a}</div>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <Badge color="gray">{r.merchant}</Badge>
+              <Btn variant="ghost" style={{padding:'2px 8px',fontSize:11}}>提取为公共KB</Btn>
+              <Btn variant="secondary" style={{padding:'2px 8px',fontSize:11}}>提取为行业模板</Btn>
+            </div>
+          </div>
+        ))}
+      </Card>
+      <Card style={{flex:1}}>
+        <SectionTitle children="跨商户高频问题聚合" action={<Badge color="purple">本月</Badge>}/>
+        {[
+          {q:'银纤维含量是多少？',count:892,covered:true},
+          {q:'能洗吗？怎么洗？',count:756,covered:true},
+          {q:'孕期全程都能穿吗？',count:634,covered:true},
+          {q:'有男款/工装款吗？',count:428,covered:false},
+          {q:'5G辐射能防吗？',count:312,covered:false},
+          {q:'有没有认证证书？',count:287,covered:false},
+        ].map((r,i)=>(
+          <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:i<5?`1px solid #f1f5f9`:'none'}}>
+            <span style={{width:20,height:20,borderRadius:'50%',background:i<3?T.accentLight:'#f1f5f9',color:i<3?T.accent:T.textMuted,fontSize:11,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{i+1}</span>
+            <span style={{flex:1,fontSize:13}}>{r.q}</span>
+            <Badge color="gray">{r.count}次</Badge>
+            {r.covered?<Badge color="green">已覆盖</Badge>:<Btn variant="ghost" style={{padding:'2px 8px',fontSize:11}}>加入模板</Btn>}
+          </div>
+        ))}
+      </Card>
+    </div>
+    <Card>
+      <SectionTitle>数据回流流程示意</SectionTitle>
+      <div style={{display:'flex',alignItems:'center',gap:8,overflowX:'auto',paddingBottom:4}}>
+        {[
+          {label:'商户反馈',desc:'标注正确答案',color:T.blue},
+          {label:'PII脱敏',desc:'自动检测+人审',color:T.purple},
+          {label:'训练样本池',desc:'1,284条',color:T.accent},
+          {label:'人工筛选',desc:'超管审核',color:T.yellow},
+          {label:'公共KB/模板',desc:'134条上线',color:T.green},
+        ].map((s,i)=>(
+          <React.Fragment key={i}>
+            <div style={{padding:'12px 16px',borderRadius:8,background:`${s.color}10`,border:`1px solid ${s.color}30`,textAlign:'center',flexShrink:0}}>
+              <div style={{fontSize:13,fontWeight:600,color:s.color}}>{s.label}</div>
+              <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{s.desc}</div>
+            </div>
+            {i<4&&<span style={{color:T.textLight,fontSize:18,flexShrink:0}}>→</span>}
+          </React.Fragment>
+        ))}
+      </div>
+    </Card>
+  </div>
+);
+
+// ─── MODULE 10: 告警 & SLA ────────────────────────────────────
+const AlertSLA = () => (
+  <div style={{display:'flex',flexDirection:'column',gap:20}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+      <div><h2 style={{fontSize:18,fontWeight:600}}>告警 & SLA</h2><p style={{fontSize:13,color:T.textMuted,marginTop:4}}>系统监控、on-call通知与一键熔断开关</p></div>
+      <Btn variant="danger">⚡ 全局紧急熔断</Btn>
+    </div>
+    <div style={{display:'flex',gap:16}}>
+      <Metric label="系统可用率（本月）" value="99.94%" sub="SLA 目标 ≥ 99.9% ✓" color={T.green} />
+      <Metric label="平均响应时长" value="1.3s" sub="P99: 3.1s" color={T.blue} />
+      <Metric label="本月故障时长" value="26 min" sub="2次事件" color={T.yellow} />
+      <Metric label="当前告警" value="1" sub="京东API延迟偏高" color={T.orange} />
+    </div>
+    <Card>
+      <SectionTitle>一键切回人工开关</SectionTitle>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12}}>
+        {[
+          {label:'单商户级',desc:'仅暂停指定商户AI服务',scope:'防辐射旗舰',color:T.yellow},
+          {label:'单店铺级',desc:'仅暂停指定店铺AI服务',scope:'天猫旗舰店',color:T.orange},
+          {label:'全局熔断',desc:'30s内所有商户切回人工',scope:'影响全部4家商户',color:T.red},
+        ].map((s,i)=>(
+          <div key={i} style={{padding:'16px',borderRadius:8,border:`1px solid ${s.color}30`,background:`${s.color}06`}}>
+            <div style={{fontWeight:600,fontSize:14,color:s.color,marginBottom:4}}>{s.label}</div>
+            <div style={{fontSize:12,color:T.textMuted,marginBottom:10}}>{s.desc}</div>
+            <div style={{fontSize:12,color:T.textLight,marginBottom:12}}>范围：{s.scope}</div>
+            <Btn variant="secondary" style={{color:s.color,borderColor:s.color,fontSize:12,padding:'5px 12px'}}>执行切换</Btn>
+          </div>
+        ))}
+      </div>
+    </Card>
+    <div style={{display:'flex',gap:16}}>
+      <Card style={{flex:2}}>
+        <SectionTitle>SLA 监控看板（近7天）</SectionTitle>
+        <PlaceholderChart height={160} label="折线图 · API可用率 / 响应延迟 / 错误率"/>
+      </Card>
+      <Card style={{flex:1}}>
+        <SectionTitle>近期事件</SectionTitle>
+        {[
+          {time:'04-22 03:15',title:'豆包API超时，切备用模型',duration:'18min',level:'yellow'},
+          {time:'04-15 22:40',title:'京东消息推送延迟激增',duration:'8min',level:'orange'},
+        ].map((e,i)=>(
+          <div key={i} style={{padding:'10px 0',borderBottom:i<1?`1px solid #f1f5f9`:'none'}}>
+            <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:4}}>
+              <Badge color={e.level}>{e.duration}</Badge>
+              <span style={{fontSize:11,color:T.textLight}}>{e.time}</span>
+            </div>
+            <div style={{fontSize:13}}>{e.title}</div>
+          </div>
+        ))}
+      </Card>
+    </div>
+    <Card>
+      <SectionTitle>on-call 通知配置</SectionTitle>
+      <div style={{display:'flex',gap:12}}>
+        {['钉钉群','电话轮呼','企业微信'].map((c,i)=>(
+          <div key={i} style={{flex:1,padding:'14px',borderRadius:8,border:`1px solid ${T.border}`,background:'#f8fafc',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div>
+              <div style={{fontSize:13,fontWeight:500}}>{c}</div>
+              <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>{i===0?'已配置Webhook':i===1?'3人轮值名单':'未配置'}</div>
+            </div>
+            <Toggle on={i<2}/>
+          </div>
+        ))}
+      </div>
+    </Card>
+  </div>
+);
+
+// ─── Nav config ────────────────────────────────────────────────
+const NAV = [
+  {id:'merchant',label:'商户管理',icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>,Component:MerchantMgmt,badge:1},
+  {id:'model',label:'模型管理',icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>,Component:ModelMgmt},
+  {id:'cost',label:'成本与用量',icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 00 0 7h5a3.5 3.5 0 010 7H6"/></svg>,Component:CostUsage,badge:1},
+  {id:'airules',label:'AI身份/规则',icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>,Component:AiRules},
+  {id:'quality',label:'质量与安全',icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,Component:QualitySafety,badge:47},
+  {id:'kb',label:'知识库总控',icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>,Component:KbControl,badge:18},
+  {id:'platform',label:'平台适配',icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>,Component:PlatformAdapt},
+  {id:'ops',label:'运营基建',icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/></svg>,Component:OpsInfra},
+  {id:'feedback',label:'数据回流',icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>,Component:DataFeedback},
+  {id:'sla',label:'告警 & SLA',icon:<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>,Component:AlertSLA,badge:1},
+];
+
+// ─── App shell ─────────────────────────────────────────────────
+const App = () => {
+  const [active, setActive] = useState('merchant');
+  const current = NAV.find(n => n.id === active);
+  const Component = current?.Component || MerchantMgmt;
+
+  return (
+    <div style={{display:'flex',height:'100vh',overflow:'hidden'}}>
+      {/* Sidebar */}
+      <aside style={{width:216,background:T.sidebar,display:'flex',flexDirection:'column',flexShrink:0}}>
+        <div style={{padding:'20px 18px 14px',borderBottom:'1px solid #1a2640'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <div style={{width:32,height:32,borderRadius:8,background:T.accent,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <div>
+              <div style={{color:'#fff',fontWeight:700,fontSize:14,letterSpacing:'-.3px'}}>AI 客服</div>
+              <div style={{display:'flex',alignItems:'center',gap:5,marginTop:1}}>
+                <span style={{padding:'1px 6px',background:'#dc2626',color:'#fff',borderRadius:4,fontSize:10,fontWeight:700,letterSpacing:.5}}>ADMIN</span>
+                <span style={{color:'#64748b',fontSize:10}}>超管控制台</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        {/* System status */}
+        <div style={{margin:'10px 12px 4px',padding:'8px 12px',borderRadius:7,background:'#162033',display:'flex',alignItems:'center',gap:8}}>
+          <div style={{width:7,height:7,borderRadius:'50%',background:T.green,boxShadow:`0 0 4px ${T.green}`}}/>
+          <span style={{color:'#94a3b8',fontSize:11}}>系统正常 · 可用率 99.94%</span>
+        </div>
+        <nav style={{flex:1,overflowY:'auto',padding:'4px 10px 10px'}}>
+          {NAV.map(n=>(
+            <button key={n.id} onClick={()=>setActive(n.id)}
+              style={{width:'100%',display:'flex',alignItems:'center',gap:9,padding:'8px 11px',borderRadius:7,border:'none',background:active===n.id?T.sidebarActive:'transparent',color:active===n.id?'#fff':'#94a3b8',fontSize:12.5,cursor:'pointer',marginBottom:1,textAlign:'left',transition:'all .15s',position:'relative'}}
+              onMouseEnter={e=>{if(active!==n.id){e.currentTarget.style.background=T.sidebarHover;e.currentTarget.style.color='#e2e8f0';}}}
+              onMouseLeave={e=>{if(active!==n.id){e.currentTarget.style.background='transparent';e.currentTarget.style.color='#94a3b8';}}}
+            >
+              {n.icon}
+              <span style={{flex:1}}>{n.label}</span>
+              {n.badge&&<span style={{padding:'1px 6px',borderRadius:10,background:active===n.id?'rgba(255,255,255,.25)':T.orange,color:active===n.id?'#fff':'#fff',fontSize:10,fontWeight:600}}>{n.badge}</span>}
+            </button>
+          ))}
+        </nav>
+        <div style={{padding:'10px 12px',borderTop:'1px solid #1a2640'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <div style={{width:26,height:26,borderRadius:'50%',background:'#1e3a5f',display:'flex',alignItems:'center',justifyContent:'center',color:'#60a5fa',fontSize:11,fontWeight:700}}>管</div>
+            <div style={{flex:1}}>
+              <div style={{color:'#e2e8f0',fontSize:11,fontWeight:500}}>admin@aikefu.com</div>
+              <div style={{color:'#64748b',fontSize:10}}>超级管理员</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main */}
+      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <header style={{height:52,background:'#fff',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',padding:'0 24px',gap:12,flexShrink:0}}>
+          <div style={{flex:1,display:'flex',alignItems:'center',gap:10}}>
+            <span style={{fontSize:14,fontWeight:600}}>{current?.label}</span>
+            {current?.badge&&<Badge color="orange">{current.badge} 条待处理</Badge>}
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:12}}>
+            <div style={{padding:'4px 10px',borderRadius:6,background:T.redBg,border:`1px solid ${T.red}20`,fontSize:12,color:T.red,fontWeight:500}}>⚡ 全局熔断备用</div>
+            <div style={{height:20,width:1,background:T.border}}/>
+            <div style={{display:'flex',alignItems:'center',gap:6}}>
+              <div style={{width:26,height:26,borderRadius:'50%',background:T.accentLight,color:T.accent,fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>管</div>
+              <span style={{fontSize:13}}>超管</span>
+            </div>
+          </div>
+        </header>
+        <main style={{flex:1,overflowY:'auto',padding:24}}>
+          <Component/>
+        </main>
+      </div>
+    </div>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
