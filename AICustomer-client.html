@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI客服 — 商户端</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body, #root { height: 100%; }
+  body { font-family: 'Noto Sans SC', 'PingFang SC', system-ui, sans-serif; background: #F0F2F5; color: #1a1a2e; }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState } = React;
+
+// ─── Design tokens ────────────────────────────────────────────
+const T = {
+  sidebar: '#111827',
+  sidebarHover: '#1f2937',
+  sidebarActive: '#1d4ed8',
+  accent: '#2563eb',
+  accentLight: '#eff6ff',
+  accentText: '#1d4ed8',
+  bg: '#F0F2F5',
+  card: '#ffffff',
+  border: '#e5e7eb',
+  text: '#111827',
+  textMuted: '#6b7280',
+  textLight: '#9ca3af',
+  green: '#16a34a',
+  greenBg: '#f0fdf4',
+  red: '#dc2626',
+  redBg: '#fef2f2',
+  yellow: '#d97706',
+  yellowBg: '#fffbeb',
+  purple: '#7c3aed',
+  purpleBg: '#f5f3ff',
+};
+
+// ─── Shared UI components ──────────────────────────────────────
+const Card = ({ children, style }) => (
+  <div style={{ background: T.card, borderRadius: 10, border: `1px solid ${T.border}`, padding: 24, ...style }}>
+    {children}
+  </div>
+);
+
+const Badge = ({ color = 'gray', children }) => {
+  const map = {
+    green: { bg: T.greenBg, color: T.green },
+    red: { bg: T.redBg, color: T.red },
+    yellow: { bg: T.yellowBg, color: T.yellow },
+    blue: { bg: T.accentLight, color: T.accentText },
+    purple: { bg: T.purpleBg, color: T.purple },
+    gray: { bg: '#f3f4f6', color: T.textMuted },
+  };
+  const s = map[color] || map.gray;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 10px', borderRadius: 20, fontSize: 12, fontWeight: 500, background: s.bg, color: s.color }}>
+      {children}
+    </span>
+  );
+};
+
+const SectionTitle = ({ children, action }) => (
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+    <h3 style={{ fontSize: 15, fontWeight: 600, color: T.text }}>{children}</h3>
+    {action}
+  </div>
+);
+
+const PlaceholderChart = ({ height = 160, label }) => (
+  <div style={{ height, background: '#f9fafb', border: `1px dashed ${T.border}`, borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+    <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+      <rect x="2" y="18" width="6" height="12" rx="2" fill="#d1d5db"/>
+      <rect x="10" y="10" width="6" height="20" rx="2" fill="#9ca3af"/>
+      <rect x="18" y="14" width="6" height="16" rx="2" fill="#d1d5db"/>
+      <rect x="26" y="6" width="6" height="24" rx="2" fill="#6b7280"/>
+    </svg>
+    <span style={{ fontSize: 12, color: T.textLight }}>{label || '图表区域'}</span>
+  </div>
+);
+
+const Btn = ({ children, variant = 'primary', style, onClick }) => {
+  const base = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 7, fontSize: 13, fontWeight: 500, cursor: 'pointer', border: 'none', transition: 'opacity .15s' };
+  const variants = {
+    primary: { background: T.accent, color: '#fff' },
+    secondary: { background: '#f3f4f6', color: T.text, border: `1px solid ${T.border}` },
+    ghost: { background: 'transparent', color: T.accent, border: `1px solid ${T.accent}` },
+  };
+  return <button style={{ ...base, ...variants[variant], ...style }} onClick={onClick}>{children}</button>;
+};
+
+const Table = ({ cols, rows }) => (
+  <div style={{ overflowX: 'auto' }}>
+    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+      <thead>
+        <tr style={{ background: '#f9fafb' }}>
+          {cols.map((c, i) => <th key={i} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 500, color: T.textMuted, borderBottom: `1px solid ${T.border}`, whiteSpace: 'nowrap' }}>{c}</th>)}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row, i) => (
+          <tr key={i} style={{ borderBottom: `1px solid #f3f4f6` }}>
+            {row.map((cell, j) => <td key={j} style={{ padding: '11px 14px', color: T.text }}>{cell}</td>)}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
+
+// ─── Metric card ───────────────────────────────────────────────
+const MetricCard = ({ label, value, sub, color = T.accent }) => (
+  <Card style={{ flex: 1 }}>
+    <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>{label}</div>
+    <div style={{ fontSize: 28, fontWeight: 700, color, marginBottom: 4 }}>{value}</div>
+    <div style={{ fontSize: 12, color: T.textLight }}>{sub}</div>
+  </Card>
+);
+
+// ─── MODULES ──────────────────────────────────────────────────
+
+// 1. 数据看板
+const Dashboard = () => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ display: 'flex', gap: 16 }}>
+      <MetricCard label="本月 AI 接待量" value="3,842" sub="↑ 12% 较上月" color={T.accent} />
+      <MetricCard label="AI 独立处理率" value="74%" sub="目标 ≥ 70% ✓" color={T.green} />
+      <MetricCard label="成单转化率" value="8.3%" sub="AI：9.1%  人工：6.8%" color={T.purple} />
+      <MetricCard label="等效节省人力" value="7.4 人" sub="本月累计" color={T.yellow} />
+    </div>
+    <div style={{ display: 'flex', gap: 16 }}>
+      <Card style={{ flex: 2 }}>
+        <SectionTitle>接待量趋势（近30天）</SectionTitle>
+        <PlaceholderChart height={180} label="折线图 · AI接待量 vs 人工接待量" />
+      </Card>
+      <Card style={{ flex: 1 }}>
+        <SectionTitle>成单来源分布</SectionTitle>
+        <PlaceholderChart height={180} label="饼图 · AI独立 / AI+人工 / 纯人工" />
+      </Card>
+    </div>
+    <div style={{ display: 'flex', gap: 16 }}>
+      <Card style={{ flex: 1 }}>
+        <SectionTitle children="高频问题 TOP 10" action={<Badge color="blue">本周</Badge>} />
+        {['这件衣服能洗吗？', '面料含金属吗？', '有没有孕妇款？', '定制需要多久？', '支持退换货吗？', '有现货吗？', '屏蔽率是多少？', '怎么洗不缩水？', '有没有尺码表？', '可以开发票吗？'].map((q, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i < 9 ? `1px solid #f3f4f6` : 'none' }}>
+            <span style={{ width: 20, height: 20, borderRadius: '50%', background: i < 3 ? T.accent : '#e5e7eb', color: i < 3 ? '#fff' : T.textMuted, fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i+1}</span>
+            <span style={{ fontSize: 13, flex: 1 }}>{q}</span>
+            <Badge color="gray">{320 - i*28} 次</Badge>
+          </div>
+        ))}
+      </Card>
+      <Card style={{ flex: 1 }}>
+        <SectionTitle children="AI 答不上来的问题" action={<Badge color="red">23 条待处理</Badge>} />
+        {['这款能防5G辐射吗？', '有没有男款设计师联名款？', '面料通过了哪些认证机构？', '能给孕8月的宝妈穿吗？', '批量定制500件优惠多少？'].map((q, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: i < 4 ? `1px solid #f3f4f6` : 'none' }}>
+            <span style={{ fontSize: 13, flex: 1, color: T.text }}>{q}</span>
+            <Btn variant="ghost" style={{ padding: '3px 10px', fontSize: 11 }}>加入KB</Btn>
+          </div>
+        ))}
+        <div style={{ marginTop: 12, fontSize: 12, color: T.textLight, textAlign: 'center' }}>查看全部 23 条 →</div>
+      </Card>
+    </div>
+  </div>
+);
+
+// 2. 店铺接入
+const ShopConnect = () => {
+  const shops = [
+    { name: '防辐射服装旗舰店', platform: '天猫', status: 'active', ai: true, mode: '全自动', lastSync: '10分钟前' },
+    { name: '防辐射孕妇装专卖店', platform: '淘宝', status: 'active', ai: true, mode: '陪跑中', lastSync: '5分钟前' },
+    { name: '防辐射工作服专营店', platform: '京东', status: 'disconnected', ai: false, mode: '—', lastSync: '2天前' },
+  ];
+  const platformColor = { 天猫: 'red', 淘宝: 'yellow', 京东: 'red' };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ fontSize: 18, fontWeight: 600 }}>店铺接入</h2>
+          <p style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>管理已授权的电商平台店铺，配置 AI 服务开关</p>
+        </div>
+        <Btn>+ 接入新店铺</Btn>
+      </div>
+      <div style={{ display: 'flex', gap: 16 }}>
+        <MetricCard label="已接入店铺" value="3" sub="天猫1 · 淘宝1 · 京东1" />
+        <MetricCard label="AI 服务运行中" value="2" sub="1 店铺已暂停" color={T.green} />
+        <MetricCard label="Token 今日消耗" value="128k" sub="预算余量 87%" color={T.purple} />
+      </div>
+      <Card>
+        <SectionTitle>店铺列表</SectionTitle>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {shops.map((s, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px', background: '#f9fafb', borderRadius: 8, border: `1px solid ${T.border}` }}>
+              <div style={{ width: 40, height: 40, borderRadius: 8, background: s.platform === '天猫' ? '#fff1f2' : s.platform === '淘宝' ? '#fffbeb' : '#fff1f2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: s.platform === '淘宝' ? T.yellow : T.red, flexShrink: 0 }}>
+                {s.platform[0]}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 500 }}>{s.name}</div>
+                <div style={{ fontSize: 12, color: T.textMuted, marginTop: 2 }}>{s.platform} · 最后同步：{s.lastSync}</div>
+              </div>
+              <Badge color={s.status === 'active' ? 'green' : 'red'}>{s.status === 'active' ? '已连接' : '已断连'}</Badge>
+              <Badge color={s.mode === '全自动' ? 'blue' : s.mode === '陪跑中' ? 'yellow' : 'gray'}>{s.mode}</Badge>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Btn variant="secondary" style={{ fontSize: 12, padding: '5px 12px' }}>配置</Btn>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 36, height: 20, borderRadius: 10, background: s.ai ? T.accent : '#d1d5db', position: 'relative', cursor: 'pointer' }}>
+                    <div style={{ position: 'absolute', top: 2, left: s.ai ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', transition: 'left .2s' }} />
+                  </div>
+                  <span style={{ fontSize: 12, color: T.textMuted }}>AI</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+      <Card>
+        <SectionTitle>接入新店铺</SectionTitle>
+        <div style={{ display: 'flex', gap: 12 }}>
+          {['淘宝', '天猫', '京东'].map(p => (
+            <div key={p} style={{ flex: 1, border: `2px dashed ${T.border}`, borderRadius: 10, padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
+              <div style={{ width: 48, height: 48, borderRadius: 12, background: p === '淘宝' ? T.yellowBg : T.redBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700, color: p === '淘宝' ? T.yellow : T.red }}>{p[0]}</div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontWeight: 500, fontSize: 14 }}>{p}</div>
+                <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>OAuth 一键授权</div>
+              </div>
+              <Btn variant="ghost" style={{ fontSize: 12 }}>授权接入</Btn>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+};
+
+// 3. 知识库
+const KnowledgeBase = () => {
+  const [tab, setTab] = useState('商品库');
+  const tabs = ['商品库', 'FAQ库', '促销规则', '话术库', '文件导入'];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h2 style={{ fontSize: 18, fontWeight: 600 }}>知识库</h2>
+          <p style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>管理 AI 的知识来源，商品信息、FAQ、话术一站配置</p>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Btn variant="secondary">一键导入行业模板</Btn>
+          <Btn>+ 新增条目</Btn>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 16 }}>
+        <MetricCard label="知识库完成度" value="81%" sub="≥ 80% 达标 ✓" color={T.green} />
+        <MetricCard label="商品条目" value="47" sub="已启用 44 条" />
+        <MetricCard label="FAQ 条目" value="128" sub="本月新增 12 条" color={T.purple} />
+        <MetricCard label="话术条目" value="32" sub="禁忌词 18 个" color={T.yellow} />
+      </div>
+      <Card>
+        <div style={{ display: 'flex', gap: 0, borderBottom: `1px solid ${T.border}`, marginBottom: 20 }}>
+          {tabs.map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{ padding: '10px 20px', background: 'none', border: 'none', borderBottom: tab === t ? `2px solid ${T.accent}` : '2px solid transparent', color: tab === t ? T.accent : T.textMuted, fontWeight: tab === t ? 600 : 400, fontSize: 13, cursor: 'pointer', marginBottom: -1 }}>
+              {t}
+            </button>
+          ))}
+        </div>
+        {tab === '商品库' && (
+          <Table
+            cols={['商品名称', 'SKU', '价格', '平台', '状态', '操作']}
+            rows={[
+              ['防辐射孕妇装 经典款', 'SKU-001', '¥ 299', <Badge color="blue">天猫</Badge>, <Badge color="green">已启用</Badge>, <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>编辑</Btn>],
+              ['防辐射围裙 厨房款', 'SKU-002', '¥ 189', <Badge color="yellow">淘宝</Badge>, <Badge color="green">已启用</Badge>, <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>编辑</Btn>],
+              ['防辐射肚兜 新生儿', 'SKU-003', '¥ 159', <Badge color="blue">天猫</Badge>, <Badge color="green">已启用</Badge>, <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>编辑</Btn>],
+              ['防辐射工作服 男款', 'SKU-004', '¥ 459', <Badge color="red">京东</Badge>, <Badge color="gray">已禁用</Badge>, <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>编辑</Btn>],
+              ['防辐射T恤 女款', 'SKU-005', '¥ 239', <Badge color="blue">天猫</Badge>, <Badge color="green">已启用</Badge>, <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>编辑</Btn>],
+            ]}
+          />
+        )}
+        {tab === 'FAQ库' && (
+          <Table
+            cols={['问法示例', '标准答案（摘要）', '命中次数', '状态', '操作']}
+            rows={[
+              ['可以洗吗？怎么洗？', '30°C以下手洗，避免暴晒，具体参见洗护标签...', <Badge color="blue">342</Badge>, <Badge color="green">启用</Badge>, <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>编辑</Btn>],
+              ['含金属成分吗？', '含银纤维，X%银纤维屏蔽辐射，通过国家标准检测...', <Badge color="blue">218</Badge>, <Badge color="green">启用</Badge>, <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>编辑</Btn>],
+              ['可以定制吗？', '支持定制，≥30件起批，专人对接，填写需求表单...', <Badge color="blue">156</Badge>, <Badge color="green">启用</Badge>, <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>编辑</Btn>],
+              ['有没有孕妇专款？', '有的，我们有针对孕期设计的系列，宽松版型...', <Badge color="blue">134</Badge>, <Badge color="green">启用</Badge>, <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>编辑</Btn>],
+              ['双十一有优惠吗？', '活动已结束（失效）', <Badge color="gray">89</Badge>, <Badge color="gray">已失效</Badge>, <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>编辑</Btn>],
+            ]}
+          />
+        )}
+        {tab === '促销规则' && (
+          <Table
+            cols={['活动名称', '生效时间', '结束时间', '规则摘要', '状态']}
+            rows={[
+              ['五一劳动节大促', '2026-05-01', '2026-05-05', '全场8折，满299减50', <Badge color="green">进行中</Badge>],
+              ['母亲节特惠', '2026-05-10', '2026-05-12', '孕妇系列9折', <Badge color="blue">未开始</Badge>],
+              ['双十一活动', '2025-11-01', '2025-11-15', '满500减100', <Badge color="gray">已结束</Badge>],
+            ]}
+          />
+        )}
+        {tab === '话术库' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {[{type:'开场白',label:'亲，您好～欢迎光临！有什么可以帮到您的呢？',tag:'blue'},{type:'引导成单',label:'这款目前库存有限，很多妈妈在回购哦，需要帮您备货吗？',tag:'green'},{type:'禁忌话术',label:'⛔ 不得说"100%防辐射"、"保证胎儿健康"等医学效果承诺',tag:'red'},{type:'合规对比',label:'可以帮您介绍产品的屏蔽率检测数据，但不能替代医学建议哦',tag:'yellow'}].map((s,i)=>(
+              <div key={i} style={{padding:'14px 16px',borderRadius:8,background:'#f9fafb',border:`1px solid ${T.border}`,display:'flex',alignItems:'center',gap:12}}>
+                <Badge color={s.tag}>{s.type}</Badge>
+                <span style={{flex:1,fontSize:13}}>{s.label}</span>
+                <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>编辑</Btn>
+              </div>
+            ))}
+          </div>
+        )}
+        {tab === '文件导入' && (
+          <div style={{textAlign:'center',padding:'40px 20px'}}>
+            <div style={{width:64,height:64,borderRadius:16,background:'#f3f4f6',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 16px'}}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <div style={{fontSize:15,fontWeight:500,marginBottom:8}}>拖拽文件到此处，或点击上传</div>
+            <div style={{fontSize:13,color:T.textMuted,marginBottom:20}}>支持 PDF · Word · Excel · 截图（OCR）</div>
+            <Btn>选择文件</Btn>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+};
+
+// 4. AI 人设
+const AiPersona = () => {
+  const [selected, setSelected] = useState(1);
+  const tones = [
+    { id: 0, name: '专业冷静', desc: '理性、权威、有条理', eg: '您好，根据产品参数，该款式屏蔽效率为99.5%，符合国标GB...' },
+    { id: 1, name: '亲切活泼', desc: '温暖、口语化、用emoji', eg: '亲亲好呀～这款超级适合孕妈哦！面料可棒了，洗了也不缩水🥰' },
+    { id: 2, name: '高端简约', desc: '克制、精准、品质感', eg: '感谢您的关注。该系列采用瑞士银纤维技术，屏蔽率经权威机构认证。' },
+    { id: 3, name: '萌系软萌', desc: '可爱、贴近、亲近感', eg: '哇哦~宝贝问的这个问题好专业呀！来来来，让小客服给您好好介绍～' },
+  ];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div>
+        <h2 style={{ fontSize: 18, fontWeight: 600 }}>AI 人设</h2>
+        <p style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>设定 AI 的品牌口吻与说话风格，无需编写 Prompt</p>
+      </div>
+      <div style={{ display: 'flex', gap: 20 }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <Card>
+            <SectionTitle>选择品牌口吻</SectionTitle>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {tones.map(t => (
+                <div key={t.id} onClick={() => setSelected(t.id)} style={{ padding: '14px 16px', borderRadius: 8, border: `2px solid ${selected === t.id ? T.accent : T.border}`, background: selected === t.id ? T.accentLight : '#fff', cursor: 'pointer', transition: 'all .15s' }}>
+                  <div style={{ fontWeight: 600, fontSize: 14, color: selected === t.id ? T.accentText : T.text }}>{t.name}</div>
+                  <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>{t.desc}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+          <Card>
+            <SectionTitle>变量设置</SectionTitle>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {[
+                { label: '身份名称', value: '小雨客服', hint: 'AI 自称的名字' },
+                { label: '风格关键词', value: '温柔、专业、耐心', hint: '最多 5 个，逗号分隔' },
+                { label: '必带话术', value: '欢迎随时咨询哦～', hint: '最多 3 条' },
+              ].map((f, i) => (
+                <div key={i}>
+                  <label style={{ fontSize: 12, color: T.textMuted, display: 'block', marginBottom: 5 }}>{f.label}</label>
+                  <input defaultValue={f.value} placeholder={f.hint} style={{ width: '100%', padding: '8px 12px', borderRadius: 7, border: `1px solid ${T.border}`, fontSize: 13, outline: 'none' }} />
+                </div>
+              ))}
+              <div>
+                <label style={{ fontSize: 12, color: T.textMuted, display: 'block', marginBottom: 5 }}>禁忌词（最多 20 个）</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: 10, border: `1px solid ${T.border}`, borderRadius: 7 }}>
+                  {['100%防辐射', '保证胎儿', '医学认证', '包治百病'].map(w => (
+                    <span key={w} style={{ padding: '3px 10px', background: T.redBg, color: T.red, borderRadius: 20, fontSize: 12 }}>{w} ×</span>
+                  ))}
+                  <input placeholder="+ 添加禁忌词" style={{ border: 'none', outline: 'none', fontSize: 12, color: T.textMuted, width: 100 }} />
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: T.textMuted, display: 'block', marginBottom: 8 }}>Emoji 使用频率</label>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  {['频繁', '偶尔', '不用'].map((v, i) => (
+                    <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                      <input type="radio" name="emoji" defaultChecked={i === 1} /> {v}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div style={{ marginTop: 18, display: 'flex', gap: 8 }}>
+              <Btn>保存设置</Btn>
+              <Btn variant="secondary">预览效果</Btn>
+            </div>
+          </Card>
+        </div>
+        <Card style={{ width: 320, alignSelf: 'flex-start' }}>
+          <SectionTitle>实时预览</SectionTitle>
+          <div style={{ background: '#f9fafb', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {[
+              { role: 'user', text: '这件衣服可以洗吗？' },
+              { role: 'ai', text: tones[selected].eg },
+              { role: 'user', text: '多少钱呀？' },
+              { role: 'ai', text: selected === 1 ? '亲，现在这款是 ¥299 哦，五一大促期间还有8折优惠呢～需要帮您看看尺码吗🎁' : '该款当前售价 ¥299，五一促销期间享8折优惠，如需了解尺码请告知。' },
+            ].map((m, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                <div style={{ maxWidth: '85%', padding: '9px 13px', borderRadius: m.role === 'user' ? '12px 12px 2px 12px' : '12px 12px 12px 2px', background: m.role === 'user' ? T.accent : '#fff', color: m.role === 'user' ? '#fff' : T.text, fontSize: 12, lineHeight: 1.6, boxShadow: '0 1px 3px rgba(0,0,0,.08)' }}>
+                  {m.text}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 10, padding: '8px 12px', background: T.yellowBg, borderRadius: 6, fontSize: 11, color: T.yellow }}>
+            ℹ️ 预览使用缓存模型，不消耗真实 Token
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+// 5. 沙盒测试
+const Sandbox = () => {
+  const msgs = [
+    { role: 'user', text: '你们这款防辐射孕妇装能保证胎儿不畸形吗？' },
+    { role: 'ai', text: '亲，这款是用来减少日常电磁辐射暴露的辅助产品，不能替代医学防护哦。胎儿健康受多种因素影响，建议咨询产科医生～', kb: ['FAQ#合规-功效边界', '话术库#禁忌拦截'], blocked: true },
+    { role: 'user', text: '那面料含什么成分？' },
+    { role: 'ai', text: '亲，我们家这款采用银纤维混纺面料，银纤维含量约35%，通过了国家纺织品屏蔽效率检测（GB/T23463），屏蔽效率≥99.5%～', kb: ['商品库#SKU-001-面料参数', 'FAQ#面料成分'], blocked: false },
+  ];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div>
+        <h2 style={{ fontSize: 18, fontWeight: 600 }}>沙盒测试</h2>
+        <p style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>在上线前与 AI 试聊，验证知识库与人设效果</p>
+      </div>
+      <div style={{ display: 'flex', gap: 16 }}>
+        <MetricCard label="沙盒测试通过" value="187 / 200" sub="目标 ≥ 90%，当前 93.5% ✓" color={T.green} />
+        <MetricCard label="平均响应延迟" value="1.4s" sub="< 3s ✓" color={T.accent} />
+        <MetricCard label="禁忌拦截次数" value="12" sub="拦截率 100%" color={T.yellow} />
+      </div>
+      <div style={{ display: 'flex', gap: 16 }}>
+        <Card style={{ flex: 1 }}>
+          <SectionTitle children="对话窗口" action={<Btn variant="secondary" style={{fontSize:12,padding:'4px 10px'}}>清空对话</Btn>} />
+          <div style={{ height: 360, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16, paddingRight: 4 }}>
+            {msgs.map((m, i) => (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start', gap: 6 }}>
+                <div style={{ maxWidth: '80%', padding: '10px 14px', borderRadius: m.role === 'user' ? '14px 14px 2px 14px' : '14px 14px 14px 2px', background: m.role === 'user' ? T.accent : '#f3f4f6', color: m.role === 'user' ? '#fff' : T.text, fontSize: 13, lineHeight: 1.6 }}>
+                  {m.text}
+                </div>
+                {m.kb && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxWidth: '80%' }}>
+                    {m.blocked && <Badge color="red">⚠ 触发禁忌拦截 → 重生成</Badge>}
+                    {m.kb.map(k => <Badge key={k} color="blue">📎 {k}</Badge>)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+            <input placeholder="输入测试问题..." style={{ flex: 1, padding: '10px 14px', borderRadius: 8, border: `1px solid ${T.border}`, fontSize: 13, outline: 'none' }} />
+            <Btn>发送</Btn>
+          </div>
+        </Card>
+        <Card style={{ width: 260, alignSelf: 'flex-start' }}>
+          <SectionTitle>快捷测试场景</SectionTitle>
+          {[
+            '问面料成分', '问洗涤方式', '定制50件报价', '问防辐射效果承诺', '问七天无理由', '情绪激动投诉'
+          ].map((s, i) => (
+            <div key={i} style={{ padding: '8px 12px', borderRadius: 6, background: '#f9fafb', marginBottom: 6, fontSize: 13, cursor: 'pointer', border: `1px solid ${T.border}` }}>
+              {s}
+            </div>
+          ))}
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+// 6. 会话与监控
+const Sessions = () => {
+  const [sel, setSel] = useState(0);
+  const list = [
+    { name: '买家 ****23', shop: '天猫旗舰店', last: '可以定制吗？50件以上有折扣吗？', time: '3分钟前', status: 'human', tag: '转人工' },
+    { name: '买家 ****87', shop: '淘宝专卖店', last: '好的，谢谢！我再考虑一下', time: '12分钟前', status: 'ai', tag: 'AI处理' },
+    { name: '买家 ****41', shop: '天猫旗舰店', last: '这个面料含金属吗？', time: '25分钟前', status: 'ai', tag: 'AI处理' },
+    { name: '买家 ****09', shop: '京东专营店', last: '什么时候能发货？', time: '1小时前', status: 'mixed', tag: 'AI+人工' },
+  ];
+  const detail = [
+    { role: 'user', text: '你们这里可以定制吗？我们公司要采购50件' },
+    { role: 'ai', text: '亲～支持定制哒！50件以上我们有专属团队对接，能给到最优报价和排期～请问是需要印公司LOGO还是特殊规格定制呢？', source: 'AI' },
+    { role: 'user', text: '需要印LOGO，另外能打折吗，50件给什么价格' },
+    { role: 'system', text: 'AI 检测到批量采购 ≥ 30 件，已触发转人工规则' },
+    { role: 'ai', text: '好的亲！您要定制50件还含LOGO印制，这种批量定制需要我们的专属顾问为您对接最优方案，请稍候，工作人员马上联系您～', source: 'AI兜底' },
+  ];
+  return (
+    <div style={{ display: 'flex', gap: 16, height: '100%' }}>
+      <Card style={{ width: 280, flexShrink: 0, padding: 0, overflow: 'hidden' }}>
+        <div style={{ padding: '16px 16px 12px', borderBottom: `1px solid ${T.border}` }}>
+          <input placeholder="搜索会话..." style={{ width: '100%', padding: '7px 12px', border: `1px solid ${T.border}`, borderRadius: 7, fontSize: 13, outline: 'none', background: '#f9fafb' }} />
+        </div>
+        {list.map((s, i) => (
+          <div key={i} onClick={() => setSel(i)} style={{ padding: '12px 16px', borderBottom: `1px solid #f3f4f6`, background: sel === i ? T.accentLight : 'transparent', cursor: 'pointer' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>{s.name}</span>
+              <span style={{ fontSize: 11, color: T.textLight }}>{s.time}</span>
+            </div>
+            <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 5 }}>{s.shop}</div>
+            <div style={{ fontSize: 12, color: T.textMuted, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', marginBottom: 6 }}>{s.last}</div>
+            <Badge color={s.status === 'ai' ? 'blue' : s.status === 'human' ? 'red' : 'yellow'}>{s.tag}</Badge>
+          </div>
+        ))}
+      </Card>
+      <Card style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${T.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <span style={{ fontWeight: 600, fontSize: 14 }}>{list[sel].name}</span>
+            <span style={{ fontSize: 12, color: T.textMuted, marginLeft: 10 }}>{list[sel].shop}</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Badge color="yellow">转人工</Badge>
+            <Btn variant="secondary" style={{ fontSize: 12, padding: '4px 10px' }}>还给 AI</Btn>
+          </div>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {detail.map((m, i) => (
+            m.role === 'system'
+              ? <div key={i} style={{ textAlign: 'center' }}><span style={{ padding: '4px 12px', borderRadius: 20, background: T.yellowBg, color: T.yellow, fontSize: 11 }}>{m.text}</span></div>
+              : (
+                <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', gap: 8 }}>
+                  {m.role === 'ai' && <div style={{ width: 28, height: 28, borderRadius: '50%', background: T.accentLight, color: T.accent, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>AI</div>}
+                  <div style={{ maxWidth: '70%' }}>
+                    <div style={{ padding: '9px 13px', borderRadius: m.role === 'user' ? '12px 12px 2px 12px' : '12px 12px 12px 2px', background: m.role === 'user' ? T.accent : '#f3f4f6', color: m.role === 'user' ? '#fff' : T.text, fontSize: 13, lineHeight: 1.6 }}>
+                      {m.text}
+                    </div>
+                    {m.source && <div style={{ fontSize: 11, color: T.textLight, marginTop: 3 }}>来源：{m.source}</div>}
+                  </div>
+                </div>
+              )
+          ))}
+        </div>
+        <div style={{ padding: '12px 20px', borderTop: `1px solid ${T.border}`, background: '#fafafa', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ fontSize: 12, color: T.textMuted }}>会话已转人工，在原平台（千牛/京麦）回复客户</span>
+        </div>
+      </Card>
+    </div>
+  );
+};
+
+// 7. 下单通知
+const OrderNotify = () => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div>
+      <h2 style={{ fontSize: 18, fontWeight: 600 }}>下单通知</h2>
+      <p style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>配置成单后的即时通知渠道与规则</p>
+    </div>
+    <div style={{ display: 'flex', gap: 16 }}>
+      <Card style={{ flex: 1 }}>
+        <SectionTitle>通知渠道</SectionTitle>
+        {[
+          { name: '钉钉群机器人', icon: '🔔', status: true, desc: 'Webhook 已配置' },
+          { name: '企微群机器人', icon: '💬', status: false, desc: '未配置' },
+          { name: '短信通知', icon: '📱', status: false, desc: '未配置' },
+          { name: '邮件通知', icon: '📧', status: false, desc: '未配置' },
+        ].map((c, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 0', borderBottom: i < 3 ? `1px solid #f3f4f6` : 'none' }}>
+            <span style={{ fontSize: 20 }}>{c.icon}</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 500 }}>{c.name}</div>
+              <div style={{ fontSize: 12, color: T.textMuted }}>{c.desc}</div>
+            </div>
+            <div style={{ width: 40, height: 22, borderRadius: 11, background: c.status ? T.accent : '#d1d5db', position: 'relative', cursor: 'pointer' }}>
+              <div style={{ position: 'absolute', top: 3, left: c.status ? 20 : 3, width: 16, height: 16, borderRadius: '50%', background: '#fff' }} />
+            </div>
+          </div>
+        ))}
+      </Card>
+      <Card style={{ flex: 1 }}>
+        <SectionTitle>通知规则</SectionTitle>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {[
+            { label: '通知范围', options: ['所有订单', '仅大单（金额≥阈值）', '仅VIP客户'] },
+          ].map((f, i) => (
+            <div key={i}>
+              <label style={{ fontSize: 12, color: T.textMuted, display: 'block', marginBottom: 8 }}>{f.label}</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {f.options.map((o, j) => (
+                  <label key={j} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', padding: '8px 12px', borderRadius: 7, border: `1px solid ${j === 1 ? T.accent : T.border}`, background: j === 1 ? T.accentLight : 'transparent' }}>
+                    <input type="radio" name="rule" defaultChecked={j === 1} /> {o}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+          <div>
+            <label style={{ fontSize: 12, color: T.textMuted, display: 'block', marginBottom: 6 }}>大单金额阈值</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13 }}>≥ ¥</span>
+              <input defaultValue="500" style={{ width: 100, padding: '7px 12px', borderRadius: 7, border: `1px solid ${T.border}`, fontSize: 13, outline: 'none' }} />
+            </div>
+          </div>
+        </div>
+      </Card>
+    </div>
+    <Card>
+      <SectionTitle>通知内容预览</SectionTitle>
+      <div style={{ background: '#f9fafb', borderRadius: 8, padding: 16, border: `1px solid ${T.border}` }}>
+        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>🛒 【AI客服】新订单通知</div>
+        <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 2 }}>
+          <div>客户：买家 ****23</div>
+          <div>商品：防辐射孕妇装 经典款 × 2</div>
+          <div>金额：¥ 598</div>
+          <div>归因：<Badge color="blue">AI推动成单</Badge></div>
+          <div style={{ marginTop: 8, padding: '8px 12px', background: '#fff', borderRadius: 6, border: `1px solid ${T.border}`, fontSize: 12 }}>
+            会话摘要（最近5轮）：客户询问面料成分 → AI介绍银纤维技术 → 客户询问价格 → AI介绍促销活动 → 客户下单...
+          </div>
+        </div>
+      </div>
+    </Card>
+  </div>
+);
+
+// 8. 转人工 / 工作模式
+const WorkMode = () => {
+  const [mode, setMode] = useState(1);
+  const modes = ['全天 AI', '工时人工兜底', '高峰协助'];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div>
+        <h2 style={{ fontSize: 18, fontWeight: 600 }}>转人工 / 工作模式</h2>
+        <p style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>配置 AI 与人工的协作方式及自动转人工规则</p>
+      </div>
+      <div style={{ display: 'flex', gap: 16 }}>
+        <Card style={{ flex: 1 }}>
+          <SectionTitle>工作模式</SectionTitle>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {modes.map((m, i) => (
+              <div key={i} onClick={() => setMode(i)} style={{ padding: '14px 16px', borderRadius: 8, border: `2px solid ${mode === i ? T.accent : T.border}`, background: mode === i ? T.accentLight : '#fff', cursor: 'pointer' }}>
+                <div style={{ fontWeight: 600, fontSize: 13, color: mode === i ? T.accentText : T.text }}>{m}</div>
+                <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>
+                  {i === 0 && '所有消息由 AI 自动回复，无人工介入'}
+                  {i === 1 && '工时内：AI草稿 + 人工确认；工时外：纯 AI 自动回复'}
+                  {i === 2 && '高峰时段 AI 接管，其他时段由商户原客服处理'}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+        <Card style={{ flex: 1 }}>
+          <SectionTitle children="转人工触发规则" action={<Btn variant="ghost" style={{fontSize:12,padding:'4px 10px'}}>+ 新增规则</Btn>} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {[
+              { type: '数量阈值', desc: '消息中提到数量 ≥ 30 件', status: true, tag: 'green' },
+              { type: '关键词触发', desc: '包含"定制" "批发" "总代"', status: true, tag: 'green' },
+              { type: '负面情绪', desc: '情感分析置信度 ≥ 80%', status: true, tag: 'green' },
+              { type: 'AI 不确定', desc: '模型置信度 < 60%', status: false, tag: 'gray' },
+            ].map((r, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#f9fafb', borderRadius: 7, border: `1px solid ${T.border}` }}>
+                <Badge color={r.tag}>{r.type}</Badge>
+                <span style={{ flex: 1, fontSize: 12, color: T.textMuted }}>{r.desc}</span>
+                <div style={{ width: 34, height: 20, borderRadius: 10, background: r.status ? T.accent : '#d1d5db', position: 'relative', cursor: 'pointer', flexShrink: 0 }}>
+                  <div style={{ position: 'absolute', top: 2, left: r.status ? 16 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff' }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+      <Card>
+        <SectionTitle>陪跑 → 全自动 切换进度</SectionTitle>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          {[
+            { label: '沙盒测试', value: '187/200条，93.5%', done: true },
+            { label: 'KB 完成度', value: '81% ≥ 80%', done: true },
+            { label: '培训完成标记', value: '待运营标记', done: false },
+            { label: '陪跑采纳率', value: '82%（连续5天）', done: false },
+          ].map((c, i) => (
+            <div key={i} style={{ padding: '14px 16px', borderRadius: 8, border: `1px solid ${c.done ? T.green : T.border}`, background: c.done ? T.greenBg : '#f9fafb' }}>
+              <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 4 }}>{c.label}</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: c.done ? T.green : T.text }}>{c.done ? '✓ ' : ''}{c.value}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button disabled style={{ padding: '9px 20px', borderRadius: 7, background: '#e5e7eb', color: T.textMuted, border: 'none', fontSize: 13, cursor: 'not-allowed' }}>
+            切换至全自动（条件未满足）
+          </button>
+          <span style={{ fontSize: 12, color: T.textMuted }}>还需满足：培训完成标记 · 陪跑采纳率 ≥ 80% 连续7天</span>
+        </div>
+      </Card>
+    </div>
+  );
+};
+
+// 9. 通知与告警
+const Alerts = () => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div>
+      <h2 style={{ fontSize: 18, fontWeight: 600 }}>通知与告警</h2>
+      <p style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>配置店铺状态和服务异常的告警推送</p>
+    </div>
+    <Card>
+      <SectionTitle>告警配置</SectionTitle>
+      <Table
+        cols={['告警类型', '触发条件', '通知渠道', '状态', '操作']}
+        rows={[
+          ['店铺断连', 'Token 过期 / OAuth 失效', '站内信 + 短信', <Badge color="green">已启用</Badge>, <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>配置</Btn>],
+          ['AI 服务异常', '错误率 > 5% / 响应超时', '站内信 + 钉钉', <Badge color="green">已启用</Badge>, <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>配置</Btn>],
+          ['订单高峰', '会话量环比增加 ≥ 200%', '站内信', <Badge color="green">已启用</Badge>, <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>配置</Btn>],
+          ['差评激增', '差评率 > 5%', '站内信 + 短信', <Badge color="gray">已关闭</Badge>, <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>配置</Btn>],
+          ['Token 配额预警', '消耗达 80%', '站内信', <Badge color="green">已启用</Badge>, <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>配置</Btn>],
+        ]}
+      />
+    </Card>
+    <Card>
+      <SectionTitle>最近告警记录</SectionTitle>
+      {[
+        { time: '2天前 14:32', type: '店铺断连', desc: '京东专营店 Token 已过期，请重新授权', level: 'red', handled: false },
+        { time: '5天前 09:15', type: 'Token 预警', desc: '天猫旗舰店本月 Token 消耗已达 80%', level: 'yellow', handled: true },
+        { time: '7天前 22:40', type: 'AI 服务异常', desc: '模型响应超时，已自动切换备用模型', level: 'red', handled: true },
+      ].map((a, i) => (
+        <div key={i} style={{ display: 'flex', gap: 12, padding: '12px 0', borderBottom: i < 2 ? `1px solid #f3f4f6` : 'none' }}>
+          <div style={{ width: 4, borderRadius: 4, background: a.level === 'red' ? T.red : T.yellow, flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+              <Badge color={a.level}>{a.type}</Badge>
+              {a.handled && <Badge color="green">已处理</Badge>}
+              <span style={{ fontSize: 11, color: T.textLight, marginLeft: 'auto' }}>{a.time}</span>
+            </div>
+            <div style={{ fontSize: 13, color: T.text }}>{a.desc}</div>
+          </div>
+        </div>
+      ))}
+    </Card>
+  </div>
+);
+
+// 10. 账户与团队
+const Account = () => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div>
+        <h2 style={{ fontSize: 18, fontWeight: 600 }}>账户与团队</h2>
+        <p style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>管理子账号权限与操作日志</p>
+      </div>
+      <Btn>+ 邀请成员</Btn>
+    </div>
+    <div style={{ display: 'flex', gap: 16 }}>
+      <Card style={{ flex: 2 }}>
+        <SectionTitle>团队成员</SectionTitle>
+        <Table
+          cols={['成员', '角色', '最后活跃', '状态', '操作']}
+          rows={[
+            [<div style={{display:'flex',alignItems:'center',gap:8}}><div style={{width:28,height:28,borderRadius:'50%',background:'#dbeafe',color:T.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700}}>王</div><span>王明（你）</span></div>, <Badge color="purple">管理员</Badge>, '刚刚', <Badge color="green">活跃</Badge>, '—'],
+            [<div style={{display:'flex',alignItems:'center',gap:8}}><div style={{width:28,height:28,borderRadius:'50%',background:'#f0fdf4',color:T.green,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700}}>李</div><span>李婷</span></div>, <Badge color="blue">运营</Badge>, '2小时前', <Badge color="green">活跃</Badge>, <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>编辑</Btn>],
+            [<div style={{display:'flex',alignItems:'center',gap:8}}><div style={{width:28,height:28,borderRadius:'50%',background:'#fffbeb',color:T.yellow,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700}}>张</div><span>张华</span></div>, <Badge color="yellow">客服</Badge>, '昨天', <Badge color="green">活跃</Badge>, <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>编辑</Btn>],
+            [<div style={{display:'flex',alignItems:'center',gap:8}}><div style={{width:28,height:28,borderRadius:'50%',background:'#f3f4f6',color:T.textMuted,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700}}>陈</div><span>陈芳</span></div>, <Badge color="yellow">客服</Badge>, '3天前', <Badge color="gray">停用</Badge>, <Btn variant="secondary" style={{padding:'3px 10px',fontSize:11}}>启用</Btn>],
+          ]}
+        />
+      </Card>
+      <Card style={{ flex: 1 }}>
+        <SectionTitle>角色权限说明</SectionTitle>
+        {[
+          { role: '管理员', color: 'purple', perms: ['所有功能全权限', '账号管理', '店铺启停', '数据导出'] },
+          { role: '运营', color: 'blue', perms: ['知识库编辑', 'AI人设配置', '沙盒测试', '会话查看'] },
+          { role: '客服', color: 'yellow', perms: ['会话查看（只读）', '反馈提交'] },
+        ].map((r, i) => (
+          <div key={i} style={{ marginBottom: i < 2 ? 14 : 0 }}>
+            <Badge color={r.color}>{r.role}</Badge>
+            <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {r.perms.map(p => <div key={p} style={{ fontSize: 12, color: T.textMuted }}>· {p}</div>)}
+            </div>
+          </div>
+        ))}
+      </Card>
+    </div>
+    <Card>
+      <SectionTitle children="操作日志" action={<Btn variant="secondary" style={{fontSize:12,padding:'4px 10px'}}>导出日志</Btn>} />
+      <Table
+        cols={['时间', '操作人', '操作内容', '影响范围']}
+        rows={[
+          ['2026-04-25 14:30', '李婷', '修改 FAQ 条目 #083（洗涤方式）', '天猫旗舰店'],
+          ['2026-04-25 11:22', '王明', '切换 AI 人设：专业冷静 → 亲切活泼', '全部店铺'],
+          ['2026-04-24 16:45', '李婷', '导入文件：洗护手册.pdf（共21条切片）', '知识库'],
+          ['2026-04-24 09:10', '王明', '接入京东专营店（OAuth授权）', '京东专营店'],
+          ['2026-04-23 18:03', '张华', '提交会话反馈 #2041（答错）', '会话记录'],
+        ]}
+      />
+    </Card>
+  </div>
+);
+
+// ─── Navigation config ─────────────────────────────────────────
+const NAV = [
+  { id: 'dashboard', label: '数据看板', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>, Component: Dashboard },
+  { id: 'shop', label: '店铺接入', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>, Component: ShopConnect },
+  { id: 'kb', label: '知识库', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>, Component: KnowledgeBase },
+  { id: 'persona', label: 'AI 人设', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>, Component: AiPersona },
+  { id: 'sandbox', label: '沙盒测试', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>, Component: Sandbox },
+  { id: 'sessions', label: '会话与监控', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>, Component: Sessions },
+  { id: 'notify', label: '下单通知', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>, Component: OrderNotify },
+  { id: 'workmode', label: '转人工 / 模式', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>, Component: WorkMode },
+  { id: 'alerts', label: '通知与告警', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>, Component: Alerts },
+  { id: 'account', label: '账户与团队', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>, Component: Account },
+];
+
+// ─── App shell ────────────────────────────────────────────────
+const App = () => {
+  const [active, setActive] = useState('dashboard');
+  const current = NAV.find(n => n.id === active);
+  const Component = current?.Component || Dashboard;
+
+  return (
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      {/* Sidebar */}
+      <aside style={{ width: 220, background: T.sidebar, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        {/* Logo */}
+        <div style={{ padding: '22px 20px 18px', borderBottom: '1px solid #1f2937' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: T.accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            </div>
+            <div>
+              <div style={{ color: '#fff', fontWeight: 700, fontSize: 15, letterSpacing: '-.3px' }}>AI 客服</div>
+              <div style={{ color: '#6b7280', fontSize: 11 }}>商户管理台</div>
+            </div>
+          </div>
+        </div>
+        {/* Onboarding stage badge */}
+        <div style={{ margin: '12px 14px', padding: '8px 12px', borderRadius: 8, background: '#1f2937', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: T.yellow }} />
+          <div>
+            <div style={{ color: '#e5e7eb', fontSize: 11, fontWeight: 500 }}>陪跑模式运行中</div>
+            <div style={{ color: '#6b7280', fontSize: 10 }}>天猫旗舰店</div>
+          </div>
+        </div>
+        {/* Nav items */}
+        <nav style={{ flex: 1, overflowY: 'auto', padding: '6px 10px' }}>
+          {NAV.map(n => (
+            <button key={n.id} onClick={() => setActive(n.id)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 7, border: 'none', background: active === n.id ? T.sidebarActive : 'transparent', color: active === n.id ? '#fff' : '#9ca3af', fontSize: 13, cursor: 'pointer', marginBottom: 2, textAlign: 'left', transition: 'background .15s, color .15s' }}
+              onMouseEnter={e => { if (active !== n.id) { e.currentTarget.style.background = T.sidebarHover; e.currentTarget.style.color = '#e5e7eb'; }}}
+              onMouseLeave={e => { if (active !== n.id) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#9ca3af'; }}}
+            >
+              {n.icon}
+              <span>{n.label}</span>
+            </button>
+          ))}
+        </nav>
+        {/* Footer */}
+        <div style={{ padding: '12px 14px', borderTop: '1px solid #1f2937' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#374151', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: 12 }}>王</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ color: '#e5e7eb', fontSize: 12, fontWeight: 500 }}>王明</div>
+              <div style={{ color: '#6b7280', fontSize: 10 }}>管理员</div>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14"/><path d="M4.93 4.93a10 10 0 000 14.14"/></svg>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main content */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* Top bar */}
+        <header style={{ height: 56, background: '#fff', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', padding: '0 28px', gap: 12, flexShrink: 0 }}>
+          <div style={{ flex: 1 }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{current?.label}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ position: 'relative' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.textMuted} strokeWidth="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+              <div style={{ position: 'absolute', top: -2, right: -2, width: 8, height: 8, borderRadius: '50%', background: T.red, border: '2px solid #fff' }} />
+            </div>
+            <div style={{ height: 20, width: 1, background: T.border }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ width: 26, height: 26, borderRadius: '50%', background: T.accentLight, color: T.accent, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>王</div>
+              <span style={{ fontSize: 13, color: T.text }}>王明</span>
+            </div>
+          </div>
+        </header>
+
+        {/* Page content */}
+        <main style={{ flex: 1, overflowY: 'auto', padding: 28 }}>
+          <Component />
+        </main>
+      </div>
+    </div>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
