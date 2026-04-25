@@ -1,15 +1,63 @@
-
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <title>入口页</title>
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+    }
+
+    .container {
+      text-align: center;
+    }
+
+    h1 {
+      margin-bottom: 20px;
+    }
+
+    p {
+      margin-bottom: 30px;
+      color: #666;
+    }
+
+    .links {
+      display: flex;
+      flex-direction: column;
+      gap: 16px; /* 控制间距 */
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 12px 24px;
+      background: #007aff;
+      color: white;
+      text-decoration: none;
+      border-radius: 8px;
+      font-size: 16px;
+      transition: 0.2s;
+    }
+
+    .btn:hover {
+      background: #005ecb;
+    }
+  </style>
 </head>
 <body>
-  <h1>欢迎访问</h1>
-  <p>点击下面进入内容页面：</p>
+  <div class="container">
+    <h1>欢迎访问</h1>
+    <p>请选择进入的系统：</p>
 
-  <a href="./AICustomer-client.html">AI客服商户端</a>
-  <a href="./AICustomer-server.html">AI客服管理端</a>
+    <div class="links">
+      <a class="btn" href="./AICustomer-client.html">AI客服商户端</a>
+      <a class="btn" href="./AICustomer-server.html">AI客服管理端</a>
+    </div>
+  </div>
 </body>
 </html>
